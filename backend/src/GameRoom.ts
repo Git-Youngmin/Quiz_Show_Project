@@ -370,18 +370,9 @@ export class GameRoom {
     this.broadcast({ type: "item_spawned", item });
   }
 
-  /** 노릴 지점: 70% 확률로 보드 위 생존자 근처, 아니면 보드 위 아무 곳 */
+  /** 노릴 지점: 생존자 공간(보드) 전체에서 고르게 — 가장자리 1칸은 비워 바로 굴러떨어지지 않게 */
   private pickThrowTarget(): Vec3 {
-    const half = BOARD_SIZE / 2 - 2;
-    // 보드 위에 서 있는 생존자만 노림 (대기 중 관전석에서 노는 생존자는 제외)
-    const onBoard = (p: PlayerInfo) =>
-      Math.abs(p.p[0]) <= BOARD_SIZE / 2 && Math.abs(p.p[2]) <= BOARD_SIZE / 2 && p.p[1] > FELL_Y && p.p[1] < 2;
-    const survivors = this.playerList().filter((p) => p.alive && onBoard(p));
-    if (survivors.length > 0 && Math.random() < 0.7) {
-      const s = survivors[Math.floor(Math.random() * survivors.length)];
-      const jitter = () => (Math.random() - 0.5) * 3;
-      return [clampN(s.p[0] + jitter(), -half, half), 0.6, clampN(s.p[2] + jitter(), -half, half)];
-    }
+    const half = BOARD_SIZE / 2 - 1;
     return [(Math.random() * 2 - 1) * half, 0.6, (Math.random() * 2 - 1) * half];
   }
 

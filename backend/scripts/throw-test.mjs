@@ -6,9 +6,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failed = 0;
 const check = (label, ok, extra = "") => { console.log(`${ok ? "✅" : "❌"} ${label}${extra ? ` — ${extra}` : ""}`); if (!ok) failed++; };
 
-// shared 의 SPECTATOR_ZONES / THROW_PADS 와 같은 값 (보드 건너편 관전석 중심 (0, -19), 보드 방향 forward = +z)
-const ZONE0 = { c: [0, -19], f: [0, 1] };
-const PADS = [14, 7, 0, -7, -14].map((x) => ({ x, z: -16.8 }));
+// shared 의 SPECTATOR_ZONES / THROW_PADS 와 같은 값 (보드 건너편 관전석 중심 (0, -21), 보드 방향 forward = +z)
+const ZONE0 = { c: [0, -21], f: [0, 1] };
+const PADS = [14, 7, 0, -7, -14].map((x) => ({ x, z: -18.8 }));
 const PAD = PADS[1];
 const ZONE_Y = 3.8;
 
@@ -82,7 +82,7 @@ if (first) {
 send(bob, { type: "throw_item", pad: 1 });
 await sleep(150);
 const cd = cooldowns(bob).at(-1);
-check("같은 버튼 즉시 재사용 → 버튼 쿨타임 2초", n() === 1 && !!cd && cd.retryInMs > 1500 && cd.retryInMs <= 2000, cd && `retryInMs=${cd.retryInMs}`);
+check("같은 버튼 즉시 재사용 → 버튼 쿨타임 1.5초", n() === 1 && !!cd && cd.retryInMs > 1000 && cd.retryInMs <= 1500, cd && `retryInMs=${cd.retryInMs}`);
 
 // 버튼별 쿨타임: 1번 버튼이 쉬는 중에도 다른 버튼(2번)은 바로 사용 가능
 send(carol, { type: "throw_item", pad: 2 });
@@ -94,11 +94,11 @@ await sleep(120);
 send(carol, { type: "throw_item", pad: 1 });
 await sleep(150);
 check("쿨타임 중인 버튼은 다른 사람도 사용 불가", n() === 2 && cooldowns(carol).some((m) => m.pad === 1));
-check("item_spawned 에 버튼 번호와 다시 쓸 수 있는 시각 포함", nth(display, 0).pad === 1 && nth(display, 0).padReadyAt - nth(display, 0).spawnedAt === 2000);
+check("item_spawned 에 버튼 번호와 다시 쓸 수 있는 시각 포함", nth(display, 0).pad === 1 && nth(display, 0).padReadyAt - nth(display, 0).spawnedAt === 1500);
 
 // 발판이 아닌 곳 / 잘못된 발판 번호 → 무시
 await sleep(2000);
-send(bob, { type: "move", p: [7, ZONE_Y, -22], r: 0 }); // 관전석 뒤쪽(버튼 아님)
+send(bob, { type: "move", p: [7, ZONE_Y, -24], r: 0 }); // 관전석 뒤쪽(버튼 아님)
 await sleep(150);
 send(bob, { type: "throw_item", pad: 1 });
 send(bob, { type: "throw_item", pad: 7 });

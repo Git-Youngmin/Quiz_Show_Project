@@ -11,8 +11,8 @@ import type { Group } from "three";
 import { ITEM_LIFETIME_MS, type ItemKind } from "@quiz/shared";
 import { useGameStore, type ActiveObstacle } from "../store/useGameStore";
 
-/** 이 높이 아래로 떨어지면 제거 */
-const REMOVE_BELOW_Y = -20;
+/** 보드 밖으로 떨어지면(보드 윗면 y=0 아래) 바로 제거 → 남은 개수·최대 개수 계산에서 빠짐 */
+const REMOVE_BELOW_Y = -3;
 /** 수명 끝 무렵 작아지며 사라지는 시간 */
 const SHRINK_MS = 400;
 

@@ -8,10 +8,10 @@ export type BgmName = "waiting" | "tension";
 export type SfxName = "jump" | "fall" | "pop" | "fanfare" | "tick" | "barrier" | "drop" | "throw" | "bonk";
 
 export const BGM: Record<BgmName, { src: string; volume: number }> = {
-  /** 대기 중 잔잔한 배경음 (루프) */
-  waiting: { src: `${base}bgm_waiting.mp3`, volume: 0.35 },
-  /** 카운트다운 ~ 문제 진행 중 긴장감 있는 비트 (루프) */
-  tension: { src: `${base}bgm_tension.mp3`, volume: 0.55 },
+  /** 대기 중 신나는 배경음 (루프) — 임시 음원은 120bpm 장조 칩튠 */
+  waiting: { src: `${base}bgm_waiting.mp3`, volume: 0.3 },
+  /** 카운트다운 ~ 문제 진행 중 몰아치는 비트 (루프) — 임시 음원은 150bpm 단조 */
+  tension: { src: `${base}bgm_tension.mp3`, volume: 0.35 },
 };
 
 export const SFX: Record<SfxName, { src: string; volume: number }> = {

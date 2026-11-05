@@ -277,8 +277,8 @@ function makeZone(cx: number, cz: number, size: [number, number], padSlots: numb
 
 /** 정면 관전석(그랜드스탠드): 깊이 8 × 가로 36 */
 const GRANDSTAND_SIZE: [number, number] = [8, 36];
-/** 보드 앞쪽 끝(+z)에서 관전석 앞벽까지 간격 */
-const GRANDSTAND_GAP = 4;
+/** 보드 끝에서 관전석 앞벽까지 간격 */
+const GRANDSTAND_GAP = 6;
 
 /**
  * 관전석 — 보드 건너편(-z)에 가로로 길게 뻗은 단일 관전석.
@@ -355,9 +355,9 @@ export interface ThrownItem {
 
 /**
  * 버튼별 쿨타임 (ms) — 한 버튼을 밟으면 그 버튼만 쉬고 나머지는 바로 쓸 수 있다.
- * 모든 플레이어가 공유하며, 전체 투척량은 버튼 수 / 쿨타임 = 초당 최대 2.5개로 제한된다.
+ * 모든 플레이어가 공유하며, 전체 투척량은 버튼 수 / 쿨타임 = 초당 최대 약 3.3개로 제한된다.
  */
-export const PAD_COOLDOWN_MS = 2000;
+export const PAD_COOLDOWN_MS = 1500;
 /** 방해물 수명 — 이후 자동 제거 (보드 아래로 떨어지면 그 전에 제거) */
 export const ITEM_LIFETIME_MS = 20_000;
 /**
