@@ -17,7 +17,7 @@ import {
   BOARD_SIZE,
   GRAVITY,
   ITEM_KINDS,
-  THROW_COOLDOWN_MS,
+  PAD_COOLDOWN_MS,
   THROW_PADS,
   isOnThrowPad,
   throwOrigin,
@@ -80,8 +80,8 @@ export class GameRoom {
   /** reveal 시작(=차단벽이 완전히 올라온 뒤) 시점의 플레이어별 구역 — 판정 기준 */
   private lockedZones = new Map<string, Answer>();
   /** 방해물 투척 쿨타임 */
-  private lastThrowAt = 0;
-  private lastThrowByPlayer = new Map<string, number>();
+  /** 버튼별로 다시 쓸 수 있는 시각 */
+  private padReadyAt: number[] = THROW_PADS.map(() => 0);
   private nextItemId = 1;
   /** 방장 비밀번호 (평문 대신 scrypt 해시 + salt 만 메모리에 보관) */
   private adminSecret: { salt: Buffer; hash: Buffer } | null = null;
@@ -163,6 +163,7 @@ export class GameRoom {
       players: this.playerList(),
       game: this.game,
       serverTime: Date.now(),
+      padReadyAt: this.padReadyAt,
     });
     if (session.player) {
       this.broadcast({ type: "player_joined", player: session.player }, ws);
@@ -216,8 +217,8 @@ export class GameRoom {
         break;
 
       case "fell":
-        // 대기/종료 중 낙사는 클라이언트가 리스폰 처리 → 탈락 아님
-        if (session.player?.alive && this.isQuestionInProgress()) {
+        // 게임 중(문제 진행·라운드 결과)에 보드 밖으로 떨어지면 탈락. 로비(대기·종료) 중 낙하는 관전석 이동일 뿐
+        if (session.player?.alive && !isLobbyPhase(this.game.phase)) {
           this.eliminate([session.player.id]);
         }
         break;
@@ -252,12 +253,6 @@ export class GameRoom {
     if (session.role === "admin") return true;
     this.send(ws, { type: "error", message: "Admin only" });
     return false;
-  }
-
-  /** 문제가 진행 중인지 (이때 떨어지면 탈락). 로비/라운드 결과/게임 종료 중에는 리스폰 */
-  private isQuestionInProgress() {
-    const p = this.game.phase;
-    return p !== "waiting" && p !== "round_standings" && p !== "game_over";
   }
 
   /** 퀴즈 세트로 게임 시작: 전원 부활 + 재배치 후 1번 문제 카운트다운 */
@@ -349,17 +344,13 @@ export class GameRoom {
     // 위치 검증: 서버가 마지막으로 받은 위치가 해당 발판 위여야 함 (스냅샷 지연을 고려해 여유 있게)
     if (!isOnThrowPad(pad, pl.p)) return;
 
-    // 쿨타임: 유저당 2초 + 방 전체 0.5초 (무한 투척으로 인한 부하/렌더링 저하 방지)
+    // 버튼별 쿨타임: 이 버튼만 쉬고 다른 버튼은 바로 사용 가능
     const now = Date.now();
-    const playerReady = (this.lastThrowByPlayer.get(pl.id) ?? 0) + THROW_COOLDOWN_MS.perPlayer;
-    const roomReady = this.lastThrowAt + THROW_COOLDOWN_MS.room;
-    const readyAt = Math.max(playerReady, roomReady);
-    if (now < readyAt) {
-      this.send(ws, { type: "throw_cooldown", retryInMs: readyAt - now });
+    if (now < this.padReadyAt[pad]) {
+      this.send(ws, { type: "throw_cooldown", pad, retryInMs: this.padReadyAt[pad] - now });
       return;
     }
-    this.lastThrowAt = now;
-    this.lastThrowByPlayer.set(pl.id, now);
+    this.padReadyAt[pad] = now + PAD_COOLDOWN_MS;
 
     const origin = throwOrigin(pad);
     const target = this.pickThrowTarget();
@@ -373,6 +364,8 @@ export class GameRoom {
       speed,
       throwerId: pl.id,
       spawnedAt: now,
+      pad,
+      padReadyAt: this.padReadyAt[pad],
     };
     this.broadcast({ type: "item_spawned", item });
   }
@@ -380,7 +373,10 @@ export class GameRoom {
   /** 노릴 지점: 70% 확률로 보드 위 생존자 근처, 아니면 보드 위 아무 곳 */
   private pickThrowTarget(): Vec3 {
     const half = BOARD_SIZE / 2 - 2;
-    const survivors = this.playerList().filter((p) => p.alive && p.p[1] > FELL_Y);
+    // 보드 위에 서 있는 생존자만 노림 (대기 중 관전석에서 노는 생존자는 제외)
+    const onBoard = (p: PlayerInfo) =>
+      Math.abs(p.p[0]) <= BOARD_SIZE / 2 && Math.abs(p.p[2]) <= BOARD_SIZE / 2 && p.p[1] > FELL_Y && p.p[1] < 2;
+    const survivors = this.playerList().filter((p) => p.alive && onBoard(p));
     if (survivors.length > 0 && Math.random() < 0.7) {
       const s = survivors[Math.floor(Math.random() * survivors.length)];
       const jitter = () => (Math.random() - 0.5) * 3;
@@ -527,7 +523,6 @@ export class GameRoom {
     const session = this.sessions.get(ws);
     if (!session) return;
     this.sessions.delete(ws);
-    this.lastThrowByPlayer.delete(session.id);
     if (session.player) {
       this.dirty.delete(session.player.id);
       this.broadcast({ type: "player_left", id: session.player.id });

@@ -36,13 +36,14 @@ export function Obstacles() {
 const PHYSICS: Record<ItemKind, { density: number; restitution: number; friction: number }> = {
   banana: { density: 3, restitution: 0.3, friction: 0.4 }, // 미끌미끌 굴러다님
   crate: { density: 4, restitution: 0.15, friction: 0.8 }, // 묵직하게 쿵
-  ball: { density: 1.8, restitution: 0.85, friction: 0.3 }, // 통통 튐
+  ball: { density: 1.8, restitution: 0.6, friction: 0.4 }, // 통통 튐
 };
 
 function Obstacle({ item }: { item: ActiveObstacle }) {
   const body = useRef<RapierRigidBody>(null);
   const visual = useRef<Group>(null);
   const launched = useRef(false);
+  const landed = useRef(false);
   const removed = useRef(false);
   const phys = PHYSICS[item.kind];
   // 회전 임펄스는 클라이언트마다 달라도 무방 (보기 좋은 텀블링용)
@@ -82,6 +83,13 @@ function Obstacle({ item }: { item: ActiveObstacle }) {
       position={item.origin}
       ccd
       userData={{ obstacle: true }}
+      onCollisionEnter={() => {
+        // 처음 닿은 순간부터 감속 → 보드 위에 오래 머묾 (날아가는 동안은 감속이 없어 서버 궤적 그대로)
+        if (landed.current || !body.current) return;
+        landed.current = true;
+        body.current.setLinearDamping(0.9);
+        body.current.setAngularDamping(1.2);
+      }}
       restitution={phys.restitution}
       friction={phys.friction}
     >

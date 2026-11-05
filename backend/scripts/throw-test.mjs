@@ -82,19 +82,19 @@ if (first) {
 send(bob, { type: "throw_item", pad: 1 });
 await sleep(150);
 const cd = cooldowns(bob).at(-1);
-check("유저당 쿨타임 2초", n() === 1 && !!cd && cd.retryInMs > 1500 && cd.retryInMs <= 2000, cd && `retryInMs=${cd.retryInMs}`);
+check("같은 버튼 즉시 재사용 → 버튼 쿨타임 2초", n() === 1 && !!cd && cd.retryInMs > 1500 && cd.retryInMs <= 2000, cd && `retryInMs=${cd.retryInMs}`);
 
-// 방 전체 쿨타임: Bob 투척 직후(0.5초 이내) Carol 투척 → 거부, 0.5초 뒤 → 허용
-send(bob, { type: "move", p: [PAD.x, ZONE_Y, PAD.z], r: 0 });
-await sleep(100);
-// 위에서 이미 ~300ms 지남 → 아직 방 쿨타임 안
-send(carol, { type: "throw_item", pad: 2 });
-await sleep(100);
-check("방 전체 쿨타임 0.5초 (직후 다른 유저 거부)", n() === 1 && cooldowns(carol).length === 1);
-await sleep(400);
+// 버튼별 쿨타임: 1번 버튼이 쉬는 중에도 다른 버튼(2번)은 바로 사용 가능
 send(carol, { type: "throw_item", pad: 2 });
 await sleep(150);
-check("방 쿨타임 경과 후 다른 유저 허용", n() === 2 && nth(display, 1).throwerId === carol.id);
+check("다른 버튼은 쿨타임 영향 없음 (바로 사용)", n() === 2 && nth(display, 1).throwerId === carol.id && nth(display, 1).pad === 2);
+// 같은 버튼(1번)은 누가 밟든 쿨타임 — Carol 이 1번으로 옮겨 밟기 → 거부
+send(carol, { type: "move", p: [PAD.x, ZONE_Y, PAD.z], r: 0 });
+await sleep(120);
+send(carol, { type: "throw_item", pad: 1 });
+await sleep(150);
+check("쿨타임 중인 버튼은 다른 사람도 사용 불가", n() === 2 && cooldowns(carol).some((m) => m.pad === 1));
+check("item_spawned 에 버튼 번호와 다시 쓸 수 있는 시각 포함", nth(display, 0).pad === 1 && nth(display, 0).padReadyAt - nth(display, 0).spawnedAt === 2000);
 
 // 발판이 아닌 곳 / 잘못된 발판 번호 → 무시
 await sleep(2000);

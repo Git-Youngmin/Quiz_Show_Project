@@ -164,6 +164,8 @@ export type ServerMessage =
       players: PlayerInfo[];
       game: GameState;
       serverTime: number;
+      /** 버튼별로 다시 쓸 수 있는 서버 시각 (늦게 들어온 사람도 쿨타임 상태를 보도록) */
+      padReadyAt: number[];
     }
   | { type: "player_joined"; player: PlayerInfo }
   | { type: "player_left"; id: string }
@@ -177,7 +179,7 @@ export type ServerMessage =
   /** 방해물 발사 — 모든 클라이언트가 같은 초기값으로 각자 물리 시뮬레이션 */
   | { type: "item_spawned"; item: ThrownItem }
   /** 투척 요청이 쿨타임에 걸림 (요청한 클라이언트에게만) */
-  | { type: "throw_cooldown"; retryInMs: number }
+  | { type: "throw_cooldown"; pad: number; retryInMs: number }
   | { type: "error"; message: string };
 
 // ───────────── 상수 ─────────────
@@ -344,17 +346,20 @@ export interface ThrownItem {
   direction: Vec3;
   speed: number;
   throwerId: string;
+  /** 발사한 버튼 번호 */
+  pad: number;
+  /** 이 버튼을 다시 쓸 수 있는 서버 시각 (버튼별 쿨타임 표시용) */
+  padReadyAt: number;
   spawnedAt: number;
 }
 
-export const THROW_COOLDOWN_MS = {
-  /** 같은 플레이어의 연속 투척 간격 */
-  perPlayer: 2000,
-  /** 방 전체 투척 간격 (동시에 여러 명이 던져도 초당 2개까지) */
-  room: 500,
-} as const;
-/** 방해물 수명 — 이후 자동 제거 */
-export const ITEM_LIFETIME_MS = 7000;
+/**
+ * 버튼별 쿨타임 (ms) — 한 버튼을 밟으면 그 버튼만 쉬고 나머지는 바로 쓸 수 있다.
+ * 모든 플레이어가 공유하며, 전체 투척량은 버튼 수 / 쿨타임 = 초당 최대 2.5개로 제한된다.
+ */
+export const PAD_COOLDOWN_MS = 2000;
+/** 방해물 수명 — 이후 자동 제거 (보드 아래로 떨어지면 그 전에 제거) */
+export const ITEM_LIFETIME_MS = 20_000;
 /**
  * 물리 엔진 중력 크기 (m/s²). 폴가이즈처럼 빠릿하게 떨어지도록 실제(9.81)의 약 3배.
  * 클라이언트 <Physics gravity> 와 서버 궤적 계산이 같은 값을 써야 방해물이 보드에 떨어진다.

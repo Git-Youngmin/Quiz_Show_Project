@@ -217,14 +217,18 @@ export function LocalPlayer({ spawn, color, shape, name, alive }: Props) {
         rb.setTranslation(s.pos, true);
         rb.setLinvel({ x: 0, y: 0, z: 0 }, true);
       }
-    } else if (store.game.phase === "waiting" || store.game.phase === "round_standings" || store.game.phase === "game_over") {
-      // 진행 중이 아닐 때는 탈락 없이 리스폰
+    } else if (isLobbyPhase(store.game.phase)) {
+      // 로비(대기·게임 종료) 중 보드에서 떨어짐 → 탈락 없이 관전석으로 (게임이 시작되면 다시 보드로)
       if (pos.y < FALL_LIMIT_Y) {
-        rb.setTranslation(spawnPos, true);
+        const s = randomSpectatorSpawn();
+        spectatorZone.current = s.zone;
+        rb.setTranslation(s.pos, true);
         rb.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        mode.current = "lobbyStand";
+        store.setLobbySpot("stand"); // 버튼 상태도 맞춤 ([보드로] 로 돌아갈 수 있음)
       }
     } else if (pos.y < FELL_Y) {
-      // 문제 진행 중 보드 밖으로 떨어짐 → 탈락 보고 (낙관적으로 alive=false → falling 전환)
+      // 게임 중(문제 진행·라운드 결과) 보드 밖으로 떨어짐 → 탈락 보고 (낙관적으로 alive=false → 관전석으로)
       store.reportFell();
     }
 

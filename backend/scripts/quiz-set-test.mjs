@@ -55,10 +55,10 @@ const createRoom = (roomId) => fetch(`${HTTP}/api/rooms`, { method: "POST", head
   const st = lastGame(display);
   check("1번 문제 후 round_standings 에서 멈춤", st.phase === "round_standings" && st.round === 1 && st.lastEliminatedCount === 1,
     `phase=${st.phase} eliminated=${st.lastEliminatedCount}`);
-  send(a, { type: "fell" }); // round_standings 중 낙하 → 탈락 아님
+  send(c, { type: "fell" }); // 라운드 결과 중에도 보드에서 떨어지면 탈락
   await sleep(2500);
-  check("관리자가 넘기기 전에는 자동 진행 안 함 + 대기 중 낙하는 탈락 아님",
-    lastGame(display).phase === "round_standings" && !display.log.some((m) => m.type === "players_eliminated" && m.ids.includes(a.id)));
+  check("관리자가 넘기기 전에는 자동 진행 안 함", lastGame(display).phase === "round_standings");
+  check("라운드 결과 중 보드에서 떨어짐 → 탈락", display.log.some((m) => m.type === "players_eliminated" && m.ids.includes(c.id)));
 
   send(b, { type: "admin_next_question" }); // 참가자는 불가
   send(admin, { type: "admin_next_question" });
@@ -81,6 +81,13 @@ const createRoom = (roomId) => fetch(`${HTTP}/api/rooms`, { method: "POST", head
   await sleep(3000 + 3000 + 3000 + 4500 + 300);
   const end = lastGame(display);
   check("문제 소진 + 여러 명 생존 → game_over (공동 생존)", end.phase === "game_over" && end.winnerId === null && end.lastEliminatedCount === 1, `phase=${end.phase}`);
+  // 로비(game_over) 중 낙하 → 탈락 아님
+  const elimCount = () => display.log.filter((m) => m.type === "players_eliminated").length;
+  const beforeFall = elimCount();
+  send(a, { type: "fell" });
+  await sleep(200);
+  check("로비(게임 종료) 중 낙하 → 탈락 아님", elimCount() === beforeFall && lastGame(display).phase === "game_over");
+
   // 입장 시 생존 여부: 게임 종료 화면에서 들어오면 바로 참가, 문제 진행 중 들어오면 관전
   const lateOver = await connect(ROOM, { role: "player", name: "AfterGame" });
   const meOver = lateOver.log.find((m) => m.type === "welcome").players.find((p) => p.id === lateOver.id);

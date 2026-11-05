@@ -4,7 +4,7 @@ import { Html } from "@react-three/drei";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import type { Group, MeshStandardMaterial } from "three";
 import { SPECTATOR_ZONES, THROW_PADS, THROW_PAD_SIZE, isLobbyPhase, type SpectatorZoneDef } from "@quiz/shared";
-import { useGameStore } from "../store/useGameStore";
+import { serverNow, useGameStore } from "../store/useGameStore";
 import { audio } from "../audio/AudioManager";
 
 const FLOOR_T = 0.6;
@@ -119,7 +119,7 @@ function ZoneLabel({ position }: { position: [number, number, number] }) {
  * 투척 버튼 — 둥근 받침대 위에 튀어나온 입체 버튼 + sensor 충돌체.
  *  - 내 캐릭터(LocalPlayer, userData.localPlayer)가 들어오는 순간 throw_item 요청 + "딸깍" 소리
  *  - 눌림 애니메이션은 내 캐릭터뿐 아니라 버튼 위에 선 모든 탈락자 위치로 판단 → 송출 화면에서도 보임
- *  - 내 쿨타임 동안은 버튼이 회색으로, 준비되면 분홍색으로 반짝임
+ *  - 이 버튼의 쿨타임 동안만 회색 (버튼마다 따로, 모든 화면에서 같게), 준비되면 분홍색으로 반짝임
  * (버튼은 시각 요소라 콜라이더가 없어 걸려 넘어지지 않음)
  */
 function ThrowPad({ index, local }: { index: number; local: [number, number] }) {
@@ -132,7 +132,7 @@ function ThrowPad({ index, local }: { index: number; local: [number, number] }) 
   const floorY = SPECTATOR_ZONES[pad.zone].center[1];
 
   useFrame((state, delta) => {
-    const { throwReadyAt, selfId, players } = useGameStore.getState();
+    const { padReadyAt, players } = useGameStore.getState();
 
     // 버튼 위에 탈락자가 서 있는지 (내 센서 상태 + 모든 플레이어 위치)
     let down = localOn.current;
@@ -155,8 +155,8 @@ function ThrowPad({ index, local }: { index: number; local: [number, number] }) 
 
     const m = capMat.current;
     if (m) {
-      const me = selfId ? players[selfId] : undefined;
-      const coolingDown = !!me && Date.now() < throwReadyAt;
+      // 이 버튼만의 쿨타임 (다른 버튼은 영향 없음)
+      const coolingDown = serverNow() < (padReadyAt[index] ?? 0);
       m.color.set(coolingDown ? "#6b6480" : PAD_COLOR);
       m.emissive.set(coolingDown ? "#000000" : PAD_COLOR);
       m.emissiveIntensity = coolingDown ? 0 : down ? 0.9 : 0.35 + 0.3 * Math.sin(state.clock.elapsedTime * 5 + index);

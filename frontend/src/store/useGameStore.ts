@@ -16,7 +16,7 @@ import { create } from "zustand";
 import {
   CLOSE_CODE,
   INITIAL_GAME_STATE,
-  THROW_COOLDOWN_MS,
+  PAD_COOLDOWN_MS,
   isLobbyPhase,
   type LobbySpot,
   wsPath,
@@ -54,8 +54,15 @@ export interface ConnectOptions {
 export interface ActiveObstacle extends ThrownItem {
   receivedAt: number;
 }
-/** 동시에 존재할 수 있는 최대 방해물 수 (렌더링/물리 부하 상한) */
-const MAX_OBSTACLES = 24;
+/** 동시에 존재할 수 있는 최대 방해물 수 (렌더링/물리 부하 상한 — 넘으면 가장 오래된 것부터 정리) */
+const MAX_OBSTACLES = 40;
+
+/** 배열의 pad 번째 값만 바꾼 새 배열 */
+const withPad = (arr: number[], pad: number, value: number) => {
+  const next = [...arr];
+  next[pad] = value;
+  return next;
+};
 
 /** 서버가 앱 정의 close code 로 끊은 경우 (재연결하지 않음) */
 const FATAL_CLOSE_CODES: number[] = Object.values(CLOSE_CODE);
@@ -92,8 +99,8 @@ interface StoreState {
 
   // ── 탈락자 방해물 ──
   obstacles: ActiveObstacle[];
-  /** 내가 다시 던질 수 있는 로컬 시각 (발판 UI 표시용, 실제 판정은 서버) */
-  throwReadyAt: number;
+  /** 버튼별로 다시 쓸 수 있는 서버 시각 (버튼마다 따로 쿨타임, 모든 플레이어 공유) */
+  padReadyAt: number[];
 
   // ── 액션 ──
   connect: (opts: ConnectOptions) => void;
@@ -185,6 +192,7 @@ export const useGameStore = create<StoreState>()((set, get) => {
           players,
           playerIds: Object.keys(players),
           game: msg.game,
+          padReadyAt: msg.padReadyAt ?? [],
           selfEliminated: false, // 새로 접속 — 관전으로 들어왔어도 "탈락"은 아님
           clockOffset: msg.serverTime - Date.now(), // pong 수신 시 지연 보정값으로 갱신
           lastError: null,
@@ -259,12 +267,16 @@ export const useGameStore = create<StoreState>()((set, get) => {
 
       case "item_spawned": {
         const next = [...get().obstacles, { ...msg.item, receivedAt: Date.now() }];
-        set({ obstacles: next.length > MAX_OBSTACLES ? next.slice(-MAX_OBSTACLES) : next });
+        set({
+          obstacles: next.length > MAX_OBSTACLES ? next.slice(-MAX_OBSTACLES) : next,
+          // 이 버튼만 쿨타임 (누가 눌렀든 모든 화면에서 회색으로)
+          padReadyAt: withPad(get().padReadyAt, msg.item.pad, msg.item.padReadyAt),
+        });
         break;
       }
 
       case "throw_cooldown":
-        set({ throwReadyAt: Date.now() + msg.retryInMs });
+        set({ padReadyAt: withPad(get().padReadyAt, msg.pad, serverNow() + msg.retryInMs) });
         break;
 
       case "pong": {
@@ -374,7 +386,7 @@ export const useGameStore = create<StoreState>()((set, get) => {
     selfEliminated: false,
     lobbySpot: "board",
     obstacles: [],
-    throwReadyAt: 0,
+    padReadyAt: [],
 
     connect: (opts) => {
       // 같은 방/역할로 이미 연결(중)이면 무시 — StrictMode 이중 effect 대비
@@ -419,10 +431,10 @@ export const useGameStore = create<StoreState>()((set, get) => {
     },
 
     throwItem: (pad, at) => {
-      const { selfId, players, throwReadyAt } = get();
+      const { selfId, players, padReadyAt } = get();
       const me = selfId ? players[selfId] : undefined;
       // 탈락자는 언제나, 생존자는 로비(대기·게임 종료) 중 관전석에 있을 때만
-      if (!me || (me.alive && !isLobbyPhase(get().game.phase)) || Date.now() < throwReadyAt) return;
+      if (!me || (me.alive && !isLobbyPhase(get().game.phase)) || serverNow() < (padReadyAt[pad] ?? 0)) return;
       // 서버는 마지막으로 받은 위치로 "발판 위인지" 검사한다.
       // 센서 이벤트는 물리 스텝 중에 오므로 이번 프레임 위치가 아직 전송 대기열에 없을 수 있다
       // → 밟은 순간의 정확한 위치를 투척 요청 직전에 보낸다 (같은 소켓이라 순서 보장)
@@ -435,7 +447,7 @@ export const useGameStore = create<StoreState>()((set, get) => {
         flushMove();
       }
       // 낙관적으로 쿨타임 시작 (서버가 거부하면 throw_cooldown 으로 보정)
-      set({ throwReadyAt: Date.now() + THROW_COOLDOWN_MS.perPlayer });
+      set({ padReadyAt: withPad(padReadyAt, pad, serverNow() + PAD_COOLDOWN_MS) });
       rawSend({ type: "throw_item", pad });
     },
 
