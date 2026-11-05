@@ -100,7 +100,7 @@ export function QuizBanner({ showSelfStatus = false }: { showSelfStatus?: boolea
             <div className="eliminated-title">탈락</div>
             <div>관전석으로 이동합니다</div>
           </div>
-          <div className="spectator-pill">관전 중 · 관전석에서 자유롭게 움직일 수 있어요</div>
+          <div className="spectator-pill">관전 중 · 앞쪽 분홍 발판을 밟으면 방해물을 던져요!</div>
         </>
       )}
     </>

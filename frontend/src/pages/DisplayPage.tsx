@@ -4,6 +4,7 @@ import { Physics } from "@react-three/rapier";
 import { ConnectionStatus } from "../components/ConnectionStatus";
 import { QuizBanner } from "../components/QuizBanner";
 import { SoundToggle } from "../components/SoundToggle";
+import { ThrowFeed } from "../components/ThrowFeed";
 import { useGameAudio } from "../audio/useGameAudio";
 import { useRoomConnection } from "../lib/useRoomConnection";
 import { World } from "../game/World";
@@ -31,6 +32,7 @@ export default function DisplayPage() {
       </Canvas>
       <QuizBanner />
       <SoundToggle />
+      <ThrowFeed />
       <div className="hud display-hud">
         <ConnectionStatus />
       </div>

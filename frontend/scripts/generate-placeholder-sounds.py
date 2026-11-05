@@ -114,3 +114,14 @@ r = rng.normal(0, 1, int(SR * 1.2))
 drop = np.convolve(r, np.ones(300) / 300, mode="same") * 6 * np.exp(-t(1.2) * 2.5)
 place(drop, kick(), 0)
 save("drop", drop)
+
+# 방해물 발사: 짧은 휘익 (상승 노이즈 스윕)
+n = rng.normal(0, 1, int(SR * 0.45))
+whoosh = np.convolve(n, np.ones(25) / 25, mode="same") * np.sin(np.linspace(0, np.pi, len(n))) ** 2
+place(whoosh, tone(np.linspace(300, 900, int(SR * 0.3)), 0.3, "sine", 0.01, 0.15) * 0.25, 0.05)
+save("throw", whoosh)
+
+# 방해물에 맞음: 통통 튀는 "뿅" (하강 사인 + 짧은 클릭)
+bonk = tone(np.linspace(700, 180, int(SR * 0.25)), 0.25, "sine", 0.001, 0.12)
+place(bonk, rng.normal(0, 1, int(SR * 0.01)) * 0.5, 0)
+save("bonk", bonk)

@@ -257,3 +257,11 @@ td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid #3b3755; }
 @keyframes pulse { 50% { transform: scale(1.06); } }
 /* 관전 배지는 사운드 버튼 아래로 (모바일은 기존처럼 하단) */
 @media (min-width: 641px) { .spectator-pill { top: 60px; } }
+
+/* ───── Phase 8: 투척 알림 ───── */
+.throw-feed { position: absolute; left: 16px; bottom: 16px; z-index: 20; display: grid; gap: 6px; pointer-events: none; }
+.throw-feed-item {
+  background: rgba(20, 18, 31, .75); border-left: 4px solid #ff3d9a; border-radius: 8px;
+  padding: 6px 12px; font-size: 15px; animation: feed-in .25s ease-out;
+}
+@keyframes feed-in { from { transform: translateX(-20px); opacity: 0; } }

@@ -22,10 +22,10 @@
 | ![4지선다](docs/screenshots/multiple-question.jpg) | ![4지선다 탈락](docs/screenshots/multiple-elimination.jpg) |
 | 보드가 A·B·C·D 네 구역으로 나뉩니다 | 시간 종료 직전 십자(➕) 유리벽이 솟아 구역 이동을 막습니다 |
 
-| 탈락자 관전석 | 우승자 피날레 |
+| 탈락자 방해물 투척 | 우승자 피날레 |
 |---|---|
-| ![관전석](docs/screenshots/spectator-zone.jpg) | ![우승](docs/screenshots/winner.jpg) |
-| 탈락하면 보드 옆 유리 상자로 이동해 계속 뛰어다니며 구경합니다 | 최후의 1인에게 카메라가 줌인하고 머리 위로 색종이가 터집니다 |
+| ![관전석 투척 발판](docs/screenshots/spectator-zone.jpg) | ![우승](docs/screenshots/winner.jpg) |
+| 탈락자는 관전석의 분홍 발판을 밟아 벽 위 발사대에서 방해물을 날려 생존자를 밀어냅니다 | 최후의 1인에게 카메라가 줌인하고 머리 위로 색종이가 터집니다 |
 
 <details>
 <summary>관리자 패널 · 대기 화면 보기</summary>
@@ -68,6 +68,8 @@
 | `fall.mp3` | 효과음 | 탈락자 비명 (참가자 화면: 내가 탈락할 때, 송출 화면: 탈락자 수만큼 최대 3번) |
 | `fanfare.mp3` | 효과음 | 우승자 결정 |
 | `pop.mp3` | 효과음 | 우승 폭죽 (5번 연달아) |
+| `throw.mp3` | 효과음 | 방해물 발사 (송출 화면: 모든 투척, 참가자 화면: 내가 던질 때) |
+| `bonk.mp3` | 효과음 | 내가 방해물에 맞았을 때 |
 | `jump.mp3` | 효과음 | 내가 점프할 때 (참가자 화면) |
 
 - 볼륨은 `frontend/src/audio/sounds.ts`에서 조절합니다. 참가자 화면은 BGM을 60% 크기로 틉니다.
@@ -119,6 +121,10 @@ npm run test:game
 npm run test:auth
 ```
 
+```bash
+npm run test:throw
+```
+
 `test:auth`는 실패 횟수 제한까지 검증하므로 백엔드를 `TRUST_PROXY=1`로 실행한 상태에서 돌려야 합니다.
 
 ## 무료 배포 (Render.com)
@@ -156,9 +162,26 @@ waiting ─(관리자 출제)→ countdown 3s → question_active N초 → revea
 - 정답은 `reveal` 전까지 클라이언트에 보내지 않습니다.
 - 제한 시간 종료 1.5초 전에 구역 사이 차단벽이 솟아오릅니다. 모든 기기가 서버 시계에 맞춰 같은 순간에 움직입니다.
 - 정답 발표 시점에 각 플레이어의 구역을 확정해 두고, 그 값으로 탈락을 판정합니다. 벽이 올라온 뒤 위치를 조작해도 결과가 바뀌지 않습니다.
-- 탈락자는 바닥을 뚫고 떨어진 뒤 관전석으로 이동합니다.
+- 탈락자는 바닥을 뚫고 떨어진 뒤 관전석으로 이동합니다. 관전석에서는 W가 보드 쪽 직진, A/D가 좌우 이동입니다.
 - 생존자가 1명 이하가 되면 `game_over`입니다. 관리자가 라운드를 리셋하면 새 게임이 시작됩니다.
 - 캐릭터 모양은 4가지지만, 물리 충돌체는 모두 같은 크기의 캡슐이라 유불리가 없습니다.
+
+## 탈락자 방해물 투척
+
+관전석 앞쪽(보드를 향한 쪽)에 분홍색 **투척 발판** 3개가 있습니다. 탈락자가 발판을 밟으면 보드 쪽 유리벽 위의 발사대에서 방해물이 포물선을 그리며 날아갑니다.
+
+| 방해물 | 특징 |
+|---|---|
+| 🍌 바나나 | 노란 캡슐, 굴러다님 |
+| 📦 상자 | 가장 무거워서 세게 밀어냄 |
+| 🔴 공 | 통통 튀어 오래 돌아다님 |
+
+- **서버가 궤적을 정합니다.** 70% 확률로 생존자 근처를 노리고, 발사 위치·방향·속도를 모든 클라이언트에 보냅니다. 각 화면은 그 값으로 `applyImpulse`를 적용해 물리를 계산합니다.
+- **맞으면 밀려납니다.** 생존자는 맞은 뒤 0.7초 동안 조작이 거의 먹히지 않고 미끄러집니다. 보드 끝에서 맞으면 떨어져 탈락할 수 있습니다.
+- **쿨타임:** 같은 사람은 2초에 한 번, 방 전체로는 0.5초에 한 번만 던질 수 있습니다. 발판은 내 쿨타임 동안 회색으로 바뀝니다.
+- **서버 검증:** 서버는 탈락자인지, 서버가 마지막으로 받은 위치가 실제로 그 발판 위인지 확인합니다.
+- **자동 정리:** 방해물은 7초 뒤나 보드 아래로 떨어지면 사라집니다. 동시에 최대 24개까지 유지합니다.
+- 송출 화면 왼쪽 아래에 "○○ → 📦 상자 투척!" 알림이 뜹니다.
 
 ## WebSocket API
 
@@ -176,12 +199,15 @@ waiting ─(관리자 출제)→ countdown 3s → question_active N초 → revea
 | C→S | `fell` | 보드 밖으로 떨어짐 (문제 진행 중이면 탈락) |
 | C→S | `admin_start_question` | `{ quizType: "OX", answer: "O"\|"X" }` 또는 `{ quizType: "MULTIPLE", answer: "A"~"D", choices: [4개] }` + `question`, `timeLimitSec` |
 | C→S | `admin_reset` | 진행 중단 + 전원 부활 + 재배치 |
+| C→S | `throw_item` | `{ pad: 0~2 }` 탈락자가 투척 발판을 밟음 |
 | S→C | `welcome` | 접속 직후: 내 id, 플레이어 목록(외형 포함), 게임 상태, 서버 시각 |
 | S→C | `player_joined` / `player_left` | 입장·퇴장 |
 | S→C | `snapshot` | 약 15Hz, 움직인 플레이어의 위치·회전만 |
 | S→C | `game_state` | `{ phase, round, quizType, question, choices, answer, droppedZones, phaseEndsAt, barrierRaisesAt, winnerId }` |
 | S→C | `players_eliminated` | `{ ids }` |
 | S→C | `round_reset` | 전원 부활 + 새 스폰 위치 |
+| S→C | `item_spawned` | `{ item: { id, kind, origin, direction, speed, throwerId } }` 방해물 발사 |
+| S→C | `throw_cooldown` | `{ retryInMs }` 쿨타임에 걸린 투척 요청 (요청자에게만) |
 
 ## 보안 메모
 

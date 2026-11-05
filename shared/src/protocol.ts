@@ -133,7 +133,9 @@ export type ClientMessage =
   /** 관리자: 문제 출제 (MULTIPLE 이면 choices 4개 필수, answer 는 A~D) */
   | ({ type: "admin_start_question" } & StartQuestionPayload)
   /** 관리자: 진행 중단 + 전원 부활 + 재배치 */
-  | { type: "admin_reset" };
+  | { type: "admin_reset" }
+  /** 탈락자: 관전석의 투척 발판(pad 번호)을 밟아 방해물 발사 요청 */
+  | { type: "throw_item"; pad: number };
 
 export type StartQuestionPayload =
   | { quizType: "OX"; question: string; answer: OXAnswer; timeLimitSec: number }
@@ -160,6 +162,10 @@ export type ServerMessage =
   | { type: "players_eliminated"; ids: string[] }
   /** 라운드 리셋: 전원 부활 + 새 스폰 위치 (클라이언트는 내 캐릭터를 이 위치로 재생성) */
   | { type: "round_reset"; players: PlayerInfo[] }
+  /** 방해물 발사 — 모든 클라이언트가 같은 초기값으로 각자 물리 시뮬레이션 */
+  | { type: "item_spawned"; item: ThrownItem }
+  /** 투척 요청이 쿨타임에 걸림 (요청한 클라이언트에게만) */
+  | { type: "throw_cooldown"; retryInMs: number }
   | { type: "error"; message: string };
 
 // ───────────── 상수 ─────────────
@@ -207,6 +213,64 @@ export const INITIAL_GAME_STATE: GameState = {
 export const isBarrierPhase = (phase: GamePhase) =>
   phase === "question_active" || phase === "reveal" || phase === "elimination";
 export const MAX_PLAYERS_PER_ROOM = 100;
+
+// ───────────── 탈락자 관전석 / 방해물 투척 ─────────────
+
+/**
+ * 관전석: 보드 왼쪽 바깥의 밀폐된 유리 상자. center.y = 발판 윗면 높이.
+ * 보드 쪽(+x) 벽 = center.x + size.x / 2
+ */
+export const SPECTATOR_ZONE = {
+  center: [-30, 3, 0] as Vec3,
+  size: [18, 28] as [number, number],
+  wallHeight: 4, // 점프 최고점(약 2.5) 보다 높게
+  ceilingHeight: 5.5, // 천장 콜라이더로 완전히 밀폐
+} as const;
+
+const ZONE_INNER_X = SPECTATOR_ZONE.center[0] + SPECTATOR_ZONE.size[0] / 2; // 보드 쪽 벽 x
+
+/** 투척 발판 (관전석 바닥 앞쪽, 보드를 향한 벽 앞에 일렬) — 월드 좌표 */
+export const THROW_PAD_SIZE = 2.4;
+export const THROW_PADS: readonly { x: number; z: number }[] = [-8, 0, 8].map((z) => ({
+  x: ZONE_INNER_X - THROW_PAD_SIZE / 2 - 0.6,
+  z,
+}));
+
+export type ItemKind = "banana" | "crate" | "ball";
+export const ITEM_KINDS: readonly ItemKind[] = ["banana", "crate", "ball"];
+
+/** 서버가 정해 브로드캐스트하는 방해물 초기 상태 */
+export interface ThrownItem {
+  id: number;
+  kind: ItemKind;
+  /** 발사 위치 (관전석 보드 쪽 유리벽 바깥 위) */
+  origin: Vec3;
+  /** 발사 방향 (단위 벡터) — 클라이언트가 impulse = direction × speed × mass 로 적용 */
+  direction: Vec3;
+  speed: number;
+  throwerId: string;
+  spawnedAt: number;
+}
+
+export const THROW_COOLDOWN_MS = {
+  /** 같은 플레이어의 연속 투척 간격 */
+  perPlayer: 2000,
+  /** 방 전체 투척 간격 (동시에 여러 명이 던져도 초당 2개까지) */
+  room: 500,
+} as const;
+/** 방해물 수명 — 이후 자동 제거 */
+export const ITEM_LIFETIME_MS = 7000;
+/** 물리 엔진 중력 (Rapier 기본값과 동일) — 서버 궤적 계산용 */
+export const GRAVITY = 9.81;
+
+/**
+ * 발판 번호 → 발사 위치: 보드 쪽 유리벽 꼭대기 발사대의 포구.
+ * 벽 바깥면에서 1유닛 이상 떨어져 있어 가장 큰 방해물(반지름 0.55)도 벽/천장과 겹치지 않음.
+ */
+export function throwOrigin(pad: number): Vec3 {
+  const p = THROW_PADS[pad];
+  return [ZONE_INNER_X + 1.2, SPECTATOR_ZONE.center[1] + SPECTATOR_ZONE.wallHeight + 1, p.z];
+}
 
 // ───────────── 관리자 인증 ─────────────
 

@@ -1,4 +1,5 @@
 /** 3D 월드 공용 상수 */
+import { SPECTATOR_ZONE as SPECTATOR_ZONE_REF } from "@quiz/shared";
 
 /** 퀴즈 보드(바닥) 크기 — 윗면이 y = 0 */
 export const BOARD_SIZE = 30;
@@ -17,20 +18,20 @@ export const FALL_LIMIT_Y = -15;
 /** 3인칭 카메라 오프셋 (캐릭터 기준) */
 export const CAMERA_OFFSET: [number, number, number] = [0, 9, 13];
 
-/** ── 탈락자 관전 구역 (보드 왼쪽 바깥, 살짝 높은 유리 상자) ── */
-export const SPECTATOR_ZONE = {
-  center: [-27, 3, 0] as [number, number, number], // 발판 윗면 중심 (y = 윗면 높이)
-  size: [10, 16] as [number, number], // x, z 크기
-  wallHeight: 4, // 점프 최고점(약 2.5) 보다 높게
-  ceilingHeight: 5.5, // 천장 콜라이더로 완전히 밀폐
-};
+/** ── 탈락자 관전 구역 (위치/크기는 서버와 공유: @quiz/shared 의 SPECTATOR_ZONE) ── */
+export { SPECTATOR_ZONE } from "@quiz/shared";
 
-/** 관전 구역 안 랜덤 리스폰 위치 */
+/**
+ * 관전 구역 안 랜덤 리스폰 위치 — 투척 발판이 있는 앞쪽(보드 방향)을 피해 뒤쪽 2/3 에 생성
+ * (리스폰하자마자 발판을 밟아 던지는 일이 없도록)
+ */
 export function randomSpectatorSpawn() {
-  const [cx, cy, cz] = SPECTATOR_ZONE.center;
-  const [sx, sz] = SPECTATOR_ZONE.size;
+  const [cx, cy, cz] = SPECTATOR_ZONE_REF.center;
+  const [sx, sz] = SPECTATOR_ZONE_REF.size;
+  const backX = cx - sx / 2 + 1.5; // 뒤쪽 벽 근처
+  const frontX = cx + sx / 2 - 5; // 발판 줄 앞까지
   return {
-    x: cx + (Math.random() - 0.5) * (sx - 3),
+    x: backX + Math.random() * (frontX - backX),
     y: cy + CHARACTER_CENTER_Y + 0.3,
     z: cz + (Math.random() - 0.5) * (sz - 3),
   };

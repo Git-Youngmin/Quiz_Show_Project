@@ -13,6 +13,14 @@ import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import type { WebSocket } from "ws";
 import {
   BARRIER_LEAD_MS,
+  BOARD_SIZE,
+  GRAVITY,
+  ITEM_KINDS,
+  SPECTATOR_ZONE,
+  THROW_COOLDOWN_MS,
+  THROW_PADS,
+  THROW_PAD_SIZE,
+  throwOrigin,
   CHARACTER_COLORS,
   FELL_Y,
   INITIAL_GAME_STATE,
@@ -37,6 +45,7 @@ import {
   type QuizType,
   type Role,
   type ServerMessage,
+  type ThrownItem,
   type Vec3,
 } from "@quiz/shared";
 
@@ -62,6 +71,10 @@ export class GameRoom {
   private secretAnswer: Answer | null = null;
   /** reveal 시작(=차단벽이 완전히 올라온 뒤) 시점의 플레이어별 구역 — 판정 기준 */
   private lockedZones = new Map<string, Answer>();
+  /** 방해물 투척 쿨타임 */
+  private lastThrowAt = 0;
+  private lastThrowByPlayer = new Map<string, number>();
+  private nextItemId = 1;
   /** 방장 비밀번호 (평문 대신 scrypt 해시 + salt 만 메모리에 보관) */
   private adminSecret: { salt: Buffer; hash: Buffer } | null = null;
 
@@ -200,6 +213,10 @@ export class GameRoom {
         }
         break;
 
+      case "throw_item":
+        this.throwItem(ws, session, msg.pad);
+        break;
+
       case "admin_start_question":
         if (!this.requireAdmin(ws, session)) return;
         this.startQuestion(ws, msg as unknown as Record<string, unknown>);
@@ -285,6 +302,62 @@ export class GameRoom {
 
     // 보드 모양(quizType)은 유지해서 리셋 직후 바닥이 바뀌지 않게
     this.setPhase({ ...INITIAL_GAME_STATE, round: this.game.round, quizType: this.game.quizType }, null);
+  }
+
+  // ───────────── 방해물 투척 (탈락자 전용) ─────────────
+
+  private throwItem(ws: WebSocket, session: Session, pad: unknown) {
+    const pl = session.player;
+    // 생존자/관리자/송출은 던질 수 없음 (조용히 무시)
+    if (!pl || pl.alive) return;
+    if (typeof pad !== "number" || !Number.isInteger(pad) || !THROW_PADS[pad]) return;
+
+    // 위치 검증: 서버가 마지막으로 받은 위치가 해당 발판 위여야 함 (스냅샷 지연을 고려해 여유 있게)
+    const p = THROW_PADS[pad];
+    const reach = THROW_PAD_SIZE / 2 + 1.2;
+    const onPad =
+      Math.abs(pl.p[0] - p.x) <= reach &&
+      Math.abs(pl.p[2] - p.z) <= reach &&
+      pl.p[1] > SPECTATOR_ZONE.center[1] - 1;
+    if (!onPad) return;
+
+    // 쿨타임: 유저당 2초 + 방 전체 0.5초 (무한 투척으로 인한 부하/렌더링 저하 방지)
+    const now = Date.now();
+    const playerReady = (this.lastThrowByPlayer.get(pl.id) ?? 0) + THROW_COOLDOWN_MS.perPlayer;
+    const roomReady = this.lastThrowAt + THROW_COOLDOWN_MS.room;
+    const readyAt = Math.max(playerReady, roomReady);
+    if (now < readyAt) {
+      this.send(ws, { type: "throw_cooldown", retryInMs: readyAt - now });
+      return;
+    }
+    this.lastThrowAt = now;
+    this.lastThrowByPlayer.set(pl.id, now);
+
+    const origin = throwOrigin(pad);
+    const target = this.pickThrowTarget();
+    const { direction, speed } = ballistic(origin, target, 1.25 + Math.random() * 0.4);
+    const item: ThrownItem = {
+      id: this.nextItemId++,
+      kind: ITEM_KINDS[Math.floor(Math.random() * ITEM_KINDS.length)],
+      origin,
+      direction,
+      speed,
+      throwerId: pl.id,
+      spawnedAt: now,
+    };
+    this.broadcast({ type: "item_spawned", item });
+  }
+
+  /** 노릴 지점: 70% 확률로 보드 위 생존자 근처, 아니면 보드 위 아무 곳 */
+  private pickThrowTarget(): Vec3 {
+    const half = BOARD_SIZE / 2 - 2;
+    const survivors = this.playerList().filter((p) => p.alive && p.p[1] > FELL_Y);
+    if (survivors.length > 0 && Math.random() < 0.7) {
+      const s = survivors[Math.floor(Math.random() * survivors.length)];
+      const jitter = () => (Math.random() - 0.5) * 3;
+      return [clampN(s.p[0] + jitter(), -half, half), 0.6, clampN(s.p[2] + jitter(), -half, half)];
+    }
+    return [(Math.random() * 2 - 1) * half, 0.6, (Math.random() * 2 - 1) * half];
   }
 
   // ───────────── 단계 전환 (setTimeout) ─────────────
@@ -419,6 +492,7 @@ export class GameRoom {
     const session = this.sessions.get(ws);
     if (!session) return;
     this.sessions.delete(ws);
+    this.lastThrowByPlayer.delete(session.id);
     if (session.player) {
       this.dirty.delete(session.player.id);
       this.broadcast({ type: "player_left", id: session.player.id });
@@ -468,6 +542,25 @@ function sanitizeVec3(v: unknown): Vec3 | null {
   if (!out.every(Number.isFinite)) return null;
   const clamp = (n: number) => Math.max(-WORLD_BOUNDS, Math.min(WORLD_BOUNDS, n));
   return [clamp(out[0]), clamp(out[1]), clamp(out[2])];
+}
+
+function clampN(n: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, n));
+}
+
+/**
+ * origin 에서 target 까지 flightSec 초 동안 날아가는 포물선의 초기 속도.
+ *   v = (T - O) / t + ½·g·t (y 성분만 중력 보정)
+ */
+function ballistic(origin: Vec3, target: Vec3, flightSec: number): { direction: Vec3; speed: number } {
+  const t = flightSec;
+  const v: Vec3 = [
+    (target[0] - origin[0]) / t,
+    (target[1] - origin[1]) / t + 0.5 * GRAVITY * t,
+    (target[2] - origin[2]) / t,
+  ];
+  const speed = Math.hypot(v[0], v[1], v[2]);
+  return { direction: [v[0] / speed, v[1] / speed, v[2] / speed], speed };
 }
 
 function randomSpawn(): Vec3 {

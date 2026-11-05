@@ -5,7 +5,7 @@
 const base = `${import.meta.env.BASE_URL}sounds/`;
 
 export type BgmName = "waiting" | "tension";
-export type SfxName = "jump" | "fall" | "pop" | "fanfare" | "tick" | "barrier" | "drop";
+export type SfxName = "jump" | "fall" | "pop" | "fanfare" | "tick" | "barrier" | "drop" | "throw" | "bonk";
 
 export const BGM: Record<BgmName, { src: string; volume: number }> = {
   /** 대기 중 잔잔한 배경음 (루프) */
@@ -28,4 +28,8 @@ export const SFX: Record<SfxName, { src: string; volume: number }> = {
   barrier: { src: `${base}barrier.mp3`, volume: 0.6 },
   /** 오답 바닥 붕괴 */
   drop: { src: `${base}drop.mp3`, volume: 0.8 },
+  /** 관전석 발사대에서 방해물 발사 (휘익) */
+  throw: { src: `${base}throw.mp3`, volume: 0.5 },
+  /** 생존자가 방해물에 맞음 (뿅) */
+  bonk: { src: `${base}bonk.mp3`, volume: 0.7 },
 };

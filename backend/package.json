@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "test:ws": "node scripts/ws-smoke-test.mjs",
     "test:game": "node scripts/game-flow-test.mjs",
-    "test:auth": "node scripts/admin-auth-test.mjs"
+    "test:auth": "node scripts/admin-auth-test.mjs",
+    "test:throw": "node scripts/throw-test.mjs"
   },
   "dependencies": {
     "@quiz/shared": "*",

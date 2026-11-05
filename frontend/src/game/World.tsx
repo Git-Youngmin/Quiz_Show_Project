@@ -2,6 +2,7 @@ import { QuizBoard } from "./QuizBoard";
 import { Barrier } from "./Barrier";
 import { SpectatorZone } from "./SpectatorZone";
 import { WinnerCelebration } from "./Confetti";
+import { Obstacles } from "./Obstacles";
 
 /** 조명/배경/바닥/차단벽/관전석/우승 연출 등 /play 와 /display 가 공유하는 월드 */
 export function World() {
@@ -24,6 +25,7 @@ export function World() {
       <Barrier />
       <SpectatorZone />
       <WinnerCelebration />
+      <Obstacles />
     </>
   );
 }

@@ -15,7 +15,8 @@
     "typecheck": "npm run typecheck -w backend && npm run typecheck -w frontend",
     "test:ws": "npm run test:ws -w backend",
     "test:game": "npm run test:game -w backend",
-    "test:auth": "npm run test:auth -w backend"
+    "test:auth": "npm run test:auth -w backend",
+    "test:throw": "npm run test:throw -w backend"
   },
   "engines": {
     "node": ">=20"

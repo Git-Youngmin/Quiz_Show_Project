@@ -38,6 +38,7 @@ export function useGameAudio(mode: "play" | "display") {
     let prevPhase: GamePhase | null = null;
     let prevBarrierAt: number | null = null;
     let prevAlive = new Map<string, boolean>();
+    let lastItemId = 0;
 
     const onPhase = (phase: GamePhase) => {
       const { game } = useGameStore.getState();
@@ -107,6 +108,15 @@ export function useGameAudio(mode: "play" | "display") {
       if (game.barrierRaisesAt !== prevBarrierAt) {
         prevBarrierAt = game.barrierRaisesAt;
         if (game.barrierRaisesAt) later(() => audio.playSfx("barrier"), game.barrierRaisesAt - serverNow());
+      }
+
+      // ── 방해물 발사음: 송출 화면은 모든 투척, 참가자 화면은 내가 던진 것만 ──
+      for (const item of state.obstacles) {
+        if (item.id <= lastItemId) continue;
+        lastItemId = item.id;
+        if (mode === "display" || item.throwerId === selfId) {
+          audio.playSfx("throw", { rate: 0.9 + Math.random() * 0.25, volume: mode === "display" ? 0.7 : 1 });
+        }
       }
 
       // ── 탈락 비명: alive true → false 로 바뀐 플레이어 ──

@@ -74,6 +74,8 @@ export function LocalPlayer({ spawn, color, shape, name, alive }: Props) {
 
   const rotY = useRef(0);
   const jumpHeld = useRef(false);
+  /** 방해물에 맞은 뒤 미끄러지는(조작이 둔해지는) 시간 */
+  const stunUntil = useRef(0);
   const camLook = useMemo(() => new Vector3(spawnPos.x, spawnPos.y, spawnPos.z), [spawnPos]);
   const camWanted = useMemo(() => new Vector3(), []);
   const camDir = useMemo(() => new Vector3(), []);
@@ -128,13 +130,15 @@ export function LocalPlayer({ spawn, color, shape, name, alive }: Props) {
     const grounded = hit !== null;
 
     // ── 수평 이동: 목표 속도로 부드럽게 가속 (공중에서는 조작감 낮춤) ──
-    const accel = 1 - Math.exp(-dt * (grounded ? 14 : 4));
+    // 방해물에 맞은 직후에는 거의 조작이 안 먹혀서 밀려난 속도가 유지됨 (넉백 연출)
+    const stunned = performance.now() < stunUntil.current;
+    const accel = 1 - Math.exp(-dt * (stunned ? 0.8 : grounded ? 14 : 4));
     const vx = vel.x + (moveX * MOVE_SPEED - vel.x) * accel;
     const vz = vel.z + (moveZ * MOVE_SPEED - vel.z) * accel;
 
     // ── 점프: 키를 누르는 순간(엣지)에만, 접지 상태에서 ──
     let vy = vel.y;
-    if (input.jump && !jumpHeld.current && grounded) {
+    if (input.jump && !jumpHeld.current && grounded && !stunned) {
       vy = JUMP_VELOCITY;
       audio.playSfx("jump", { rate: 0.93 + Math.random() * 0.14 }); // 매번 살짝 다른 높이
     }
@@ -169,11 +173,11 @@ export function LocalPlayer({ spawn, color, shape, name, alive }: Props) {
     // ── 카메라 ──
     const p = rb.translation();
     if (mode.current === "spectating") {
-      // 관전: 보드 반대편 뒤쪽 위에서, 내 캐릭터 너머로 보드를 바라봄
-      tmp.set(p.x, 0, p.z).normalize(); // 보드 중심 → 나 방향
-      camWanted.set(p.x + tmp.x * 9, p.y + 6, p.z + tmp.z * 9);
+      // 관전: 내 캐릭터 뒤(-x) 위에서 보드 방향(+x)을 곧게 바라봄
+      // → W = 보드(투척 발판) 쪽 직진, A/D = 좌우 이동이라 발판을 겨냥하기 쉬움
+      camWanted.set(p.x - 9, p.y + 6, p.z);
       state.camera.position.lerp(camWanted, 1 - Math.exp(-dt * 4));
-      camLook.lerp(tmp.set(p.x * 0.45, 0.5, p.z * 0.45), 1 - Math.exp(-dt * 4));
+      camLook.lerp(tmp.set(p.x + 14, 0.5, p.z), 1 - Math.exp(-dt * 4));
       state.camera.lookAt(camLook);
     } else {
       camLook.lerp(tmp.set(p.x, Math.max(p.y, 0), p.z), 1 - Math.exp(-dt * 8));
@@ -195,6 +199,16 @@ export function LocalPlayer({ spawn, color, shape, name, alive }: Props) {
       enabledRotations={[false, false, false]}
       canSleep={false}
       ccd
+      userData={{ localPlayer: true }}
+      onCollisionEnter={({ other }) => {
+        // 생존 중 방해물에 맞으면 잠깐 경직 + 효과음 (관전석에서는 방해물이 오지 않음)
+        if (mode.current !== "playing") return;
+        if (!(other.rigidBodyObject?.userData as { obstacle?: boolean } | undefined)?.obstacle) return;
+        const now = performance.now();
+        if (now < stunUntil.current - 300) return; // 연속 충돌 시 효과음 중복 방지
+        stunUntil.current = now + 700;
+        audio.playSfx("bonk", { rate: 0.9 + Math.random() * 0.2 });
+      }}
     >
       {/* 외형과 무관하게 모두 같은 캡슐 충돌체 (공평성).
           friction 0: 속도를 직접 제어하므로 벽/다른 캐릭터에 달라붙지 않게 */}

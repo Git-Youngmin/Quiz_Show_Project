@@ -16,6 +16,7 @@ import { create } from "zustand";
 import {
   CLOSE_CODE,
   INITIAL_GAME_STATE,
+  THROW_COOLDOWN_MS,
   wsPath,
   type CharacterShape,
   type ClientMessage,
@@ -24,6 +25,7 @@ import {
   type Role,
   type ServerMessage,
   type StartQuestionPayload,
+  type ThrownItem,
   type Vec3,
 } from "@quiz/shared";
 
@@ -45,6 +47,13 @@ export interface ConnectOptions {
   /** 관리자 전용: 방장 비밀번호 */
   password?: string;
 }
+
+/** 화면에 존재하는 방해물 (수신 시각은 로컬 시계 — 수명 계산용) */
+export interface ActiveObstacle extends ThrownItem {
+  receivedAt: number;
+}
+/** 동시에 존재할 수 있는 최대 방해물 수 (렌더링/물리 부하 상한) */
+const MAX_OBSTACLES = 24;
 
 /** 서버가 앱 정의 close code 로 끊은 경우 (재연결하지 않음) */
 const FATAL_CLOSE_CODES: number[] = Object.values(CLOSE_CODE);
@@ -72,6 +81,11 @@ interface StoreState {
   /** round_reset 마다 증가 → 내 캐릭터를 새 스폰 위치에 재생성하는 key 로 사용 */
   spawnVersion: number;
 
+  // ── 탈락자 방해물 ──
+  obstacles: ActiveObstacle[];
+  /** 내가 다시 던질 수 있는 로컬 시각 (발판 UI 표시용, 실제 판정은 서버) */
+  throwReadyAt: number;
+
   // ── 액션 ──
   connect: (opts: ConnectOptions) => void;
   disconnect: () => void;
@@ -79,6 +93,10 @@ interface StoreState {
   sendMove: (x: number, y: number, z: number, rotY?: number) => void;
   /** 플레이어: 맵 밖으로 떨어졌음을 서버에 보고 (진행 중이면 탈락) */
   reportFell: () => void;
+  /** 탈락자: 투척 발판을 밟음 → 방해물 발사 요청 */
+  throwItem: (pad: number) => void;
+  /** 수명이 다한 방해물 제거 */
+  removeObstacle: (id: number) => void;
   /** 관리자: 문제 출제 (OX / 4지선다) */
   startQuestion: (payload: StartQuestionPayload) => void;
   /** 관리자: 진행 중단 + 전원 부활 */
@@ -217,6 +235,16 @@ export const useGameStore = create<StoreState>()((set, get) => {
         break;
       }
 
+      case "item_spawned": {
+        const next = [...get().obstacles, { ...msg.item, receivedAt: Date.now() }];
+        set({ obstacles: next.length > MAX_OBSTACLES ? next.slice(-MAX_OBSTACLES) : next });
+        break;
+      }
+
+      case "throw_cooldown":
+        set({ throwReadyAt: Date.now() + msg.retryInMs });
+        break;
+
       case "pong": {
         const now = Date.now();
         const latency = now - msg.t;
@@ -265,7 +293,7 @@ export const useGameStore = create<StoreState>()((set, get) => {
       if (socket !== ws) return; // 이미 교체된 옛 소켓
       socket = null;
       clearTimers();
-      set({ status: "closed", selfId: null, players: {}, playerIds: [], game: INITIAL_GAME_STATE });
+      set({ status: "closed", selfId: null, players: {}, playerIds: [], game: INITIAL_GAME_STATE, obstacles: [] });
 
       if (manualClose) return;
       if (FATAL_CLOSE_CODES.includes(e.code)) {
@@ -321,6 +349,8 @@ export const useGameStore = create<StoreState>()((set, get) => {
     players: {},
     game: INITIAL_GAME_STATE,
     spawnVersion: 0,
+    obstacles: [],
+    throwReadyAt: 0,
 
     connect: (opts) => {
       // 같은 방/역할로 이미 연결(중)이면 무시 — StrictMode 이중 effect 대비
@@ -360,7 +390,28 @@ export const useGameStore = create<StoreState>()((set, get) => {
         latency: null,
         game: INITIAL_GAME_STATE,
         fatalCloseCode: null,
+        obstacles: [],
       });
+    },
+
+    throwItem: (pad) => {
+      const { selfId, players, throwReadyAt } = get();
+      const me = selfId ? players[selfId] : undefined;
+      if (!me || me.alive || Date.now() < throwReadyAt) return;
+      // 서버는 마지막으로 받은 위치로 "발판 위인지" 검사 → 스로틀링 대기 중인 위치를 먼저 전송
+      // (같은 소켓이라 순서 보장)
+      if (pendingMove) {
+        if (pendingMoveTimer) clearTimeout(pendingMoveTimer);
+        flushMove();
+      }
+      // 낙관적으로 쿨타임 시작 (서버가 거부하면 throw_cooldown 으로 보정)
+      set({ throwReadyAt: Date.now() + THROW_COOLDOWN_MS.perPlayer });
+      rawSend({ type: "throw_item", pad });
+    },
+
+    removeObstacle: (id) => {
+      const obstacles = get().obstacles;
+      if (obstacles.some((o) => o.id === id)) set({ obstacles: obstacles.filter((o) => o.id !== id) });
     },
 
     reportFell: () => {
