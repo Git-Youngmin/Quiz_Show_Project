@@ -279,11 +279,13 @@ const GRANDSTAND_SIZE: [number, number] = [8, 36];
 const GRANDSTAND_GAP = 4;
 
 /**
- * 관전석 — 메인 카메라 기준 보드 정면 앞쪽(+z)에 가로로 길게 뻗은 단일 관전석.
+ * 관전석 — 보드 건너편(-z)에 가로로 길게 뻗은 단일 관전석.
+ *  - 생존자 카메라는 +z 쪽에서 -z 를 바라보므로, 생존자 화면에서 관전석이 정면(화면 위쪽)에 보인다
+ *  - 관전석에 들어가면 반대로 +z(보드 쪽)를 바라봐서 정면에 생존자석(보드)이 보인다
  * 앞벽(보드 쪽)을 따라 투척 버튼 5개가 같은 간격으로 놓인다.
  */
 export const SPECTATOR_ZONES: readonly SpectatorZoneDef[] = [
-  makeZone(0, BOARD_SIZE / 2 + GRANDSTAND_GAP + GRANDSTAND_SIZE[0] / 2, GRANDSTAND_SIZE, [-14, -7, 0, 7, 14]),
+  makeZone(0, -(BOARD_SIZE / 2 + GRANDSTAND_GAP + GRANDSTAND_SIZE[0] / 2), GRANDSTAND_SIZE, [-14, -7, 0, 7, 14]),
 ];
 
 /** 관전석 로컬 좌표(lx: 앞뒤, lz: 좌우) → 월드 (x, z) */

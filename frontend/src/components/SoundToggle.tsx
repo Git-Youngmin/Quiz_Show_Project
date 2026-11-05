@@ -2,12 +2,12 @@ import { audio } from "../audio/AudioManager";
 import { useAudioState } from "../audio/useGameAudio";
 
 /** 우측 상단 음소거 토글. 브라우저가 소리를 막고 있으면 "사운드 켜기" 안내로 바뀜 */
-export function SoundToggle() {
+export function SoundToggle({ inline = false }: { inline?: boolean }) {
   const { muted, locked } = useAudioState();
 
   if (locked && !muted) {
     return (
-      <button type="button" className="sound-toggle locked" aria-label="사운드 켜기" onClick={() => audio.unlock()}>
+      <button type="button" className={`sound-toggle locked ${inline ? "inline" : ""}`} aria-label="사운드 켜기" onClick={() => audio.unlock()}>
         🔇<span className="sound-toggle-label"> 클릭해서 사운드 켜기</span>
       </button>
     );
@@ -15,7 +15,7 @@ export function SoundToggle() {
   return (
     <button
       type="button"
-      className="sound-toggle"
+      className={`sound-toggle ${inline ? "inline" : ""}`}
       aria-label={muted ? "소리 켜기" : "소리 끄기"}
       aria-pressed={muted}
       onClick={() => audio.setMuted(!muted)}

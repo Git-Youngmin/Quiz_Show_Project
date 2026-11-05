@@ -6,9 +6,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failed = 0;
 const check = (label, ok, extra = "") => { console.log(`${ok ? "✅" : "❌"} ${label}${extra ? ` — ${extra}` : ""}`); if (!ok) failed++; };
 
-// shared 의 SPECTATOR_ZONES / THROW_PADS 와 같은 값 (정면 관전석 중심 (0, 19), 보드 방향 forward = -z)
-const ZONE0 = { c: [0, 19], f: [0, -1] };
-const PADS = [-14, -7, 0, 7, 14].map((x) => ({ x, z: 16.8 }));
+// shared 의 SPECTATOR_ZONES / THROW_PADS 와 같은 값 (보드 건너편 관전석 중심 (0, -19), 보드 방향 forward = +z)
+const ZONE0 = { c: [0, -19], f: [0, 1] };
+const PADS = [14, 7, 0, -7, -14].map((x) => ({ x, z: -16.8 }));
 const PAD = PADS[1];
 const ZONE_Y = 3.8;
 
@@ -98,7 +98,7 @@ check("방 쿨타임 경과 후 다른 유저 허용", n() === 2 && nth(display,
 
 // 발판이 아닌 곳 / 잘못된 발판 번호 → 무시
 await sleep(2000);
-send(bob, { type: "move", p: [-7, ZONE_Y, 22], r: 0 }); // 관전석 뒤쪽(버튼 아님)
+send(bob, { type: "move", p: [7, ZONE_Y, -22], r: 0 }); // 관전석 뒤쪽(버튼 아님)
 await sleep(150);
 send(bob, { type: "throw_item", pad: 1 });
 send(bob, { type: "throw_item", pad: 7 });

@@ -3,7 +3,7 @@ import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import type { Group, MeshStandardMaterial } from "three";
-import { SPECTATOR_ZONES, THROW_PADS, THROW_PAD_SIZE, type SpectatorZoneDef } from "@quiz/shared";
+import { SPECTATOR_ZONES, THROW_PADS, THROW_PAD_SIZE, isLobbyPhase, type SpectatorZoneDef } from "@quiz/shared";
 import { useGameStore } from "../store/useGameStore";
 import { audio } from "../audio/AudioManager";
 
@@ -83,9 +83,7 @@ function SpectatorBox({ zone, index }: { zone: SpectatorZoneDef; index: number }
         <Launcher key={p.index} position={[depth / 2, wh + 0.1, p.local[1]]} />
       ))}
 
-      <Html position={[-depth / 2, wh + 0.8, 0]} center zIndexRange={[10, 0]}>
-        <div className="zone-label">관전석 · 분홍 버튼을 밟으면 방해물 발사!</div>
-      </Html>
+      <ZoneLabel position={[depth / 2, wh + 0.9, 0]} />
     </RigidBody>
   );
 }
@@ -98,6 +96,24 @@ const BUTTON = {
   /** 눌렸을 때 버튼이 내려가는 깊이 */
   travel: 0.2,
 };
+
+/**
+ * 관전석 앞벽 위 안내 라벨 — 보드 쪽(생존자·송출 화면)에서 보이도록.
+ * 관전석 안에 있는 사람에게는 배너/배지로 안내하므로 숨긴다 (보드 한가운데 떠 보이지 않게).
+ */
+function ZoneLabel({ position }: { position: [number, number, number] }) {
+  const inStand = useGameStore((s) => {
+    const me = s.selfId ? s.players[s.selfId] : undefined;
+    if (!me) return false;
+    return !me.alive || (s.lobbySpot === "stand" && isLobbyPhase(s.game.phase));
+  });
+  if (inStand) return null;
+  return (
+    <Html position={position} center zIndexRange={[10, 0]}>
+      <div className="zone-label">관전석 · 분홍 버튼을 밟으면 방해물 발사!</div>
+    </Html>
+  );
+}
 
 /**
  * 투척 버튼 — 둥근 받침대 위에 튀어나온 입체 버튼 + sensor 충돌체.

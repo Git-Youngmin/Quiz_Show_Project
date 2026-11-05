@@ -4,9 +4,10 @@ import { CLOSE_CODE, MAX_PLAYERS_PER_ROOM, isLobbyPhase } from "@quiz/shared";
 import { Canvas } from "@react-three/fiber";
 import { KeyboardControls } from "@react-three/drei";
 import { Physics } from "@react-three/rapier";
-import { ConnectionStatus } from "../components/ConnectionStatus";
+import { ConnectionNotice } from "../components/ConnectionNotice";
 import { useRoomConnection } from "../lib/useRoomConnection";
-import { useGameStore, useSelf, useSelfAlive } from "../store/useGameStore";
+import { stageButtonGuard } from "../lib/stageButtonGuard";
+import { useGameStore, useSelfAlive } from "../store/useGameStore";
 import { QuizBanner } from "../components/QuizBanner";
 import { SoundToggle } from "../components/SoundToggle";
 import { useGameAudio } from "../audio/useGameAudio";
@@ -47,7 +48,7 @@ function PlayScene() {
 
   return (
     <KeyboardControls map={KEYBOARD_MAP}>
-      <div className="stage">
+      <div className="stage" {...stageButtonGuard}>
         <Canvas shadows camera={{ position: CAMERA_OFFSET, fov: 50 }} dpr={[1, 2]}>
           <Suspense fallback={null}>
             <Physics gravity={PHYSICS_GRAVITY}>
@@ -58,15 +59,17 @@ function PlayScene() {
           </Suspense>
         </Canvas>
 
-        <PlayHud />
-        <SoundToggle />
+        <ConnectionNotice />
         <PlayCorner />
         <QuizBanner showSelfStatus />
         {/* 탈락 후에도 관전석에서 움직일 수 있으므로 조작 UI 유지 */}
         {showJoystick ? (
           <VirtualJoystick />
         ) : (
-          <div className="hint">{alive ? "WASD / 방향키 이동 · Space 점프" : "관전석 · WASD 이동 · Space 점프"}</div>
+          // 조작 안내는 처음 몇 초만 보이고 사라짐 (관전석으로 이동하면 다시 잠깐)
+          <div className="hint fade" key={alive ? "board" : "stand"}>
+            {alive ? "WASD / 방향키 이동 · Space 점프" : "관전석 · WASD 이동 · Space 점프"}
+          </div>
         )}
       </div>
     </KeyboardControls>
@@ -95,24 +98,6 @@ function SelfPlayer() {
       name={spawn.name}
       alive={alive}
     />
-  );
-}
-
-function PlayHud() {
-  const self = useSelf();
-  const count = useGameStore((s) => s.playerIds.length);
-  return (
-    <div className="hud">
-      <ConnectionStatus />
-      <div className="row mono" style={{ marginTop: 4 }}>
-        {self && (
-          <span>
-            <span style={{ color: self.color }}>●</span> {self.name}
-          </span>
-        )}
-        <span>참가자 {count}명</span>
-      </div>
-    </div>
   );
 }
 
@@ -155,6 +140,7 @@ function PlayCorner() {
 
   return (
     <div className="play-corner">
+      <SoundToggle inline />
       <button
         type="button"
         className="corner-btn"
