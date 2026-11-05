@@ -147,9 +147,15 @@ td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid #3b3755; }
 .field { display: grid; gap: 6px; font-size: 14px; }
 .field .input { width: 100%; }
 .field-error { color: #ff8a8a; }
-.picker { border: 0; padding: 0; margin: 0; }
+/* fieldset 기본값 min-inline-size: min-content 가 좁은 화면에서 카드를 밀어내므로 해제 */
+.picker { border: 0; padding: 0; margin: 0; min-inline-size: 0; }
 .picker legend { font-size: 14px; margin-bottom: 8px; }
-.shape-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.shape-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 360px) {
+  .lobby { padding: 16px 12px; }
+  .lobby-card { padding: 16px; }
+  .shape-grid, .color-grid { gap: 6px; }
+}
 .shape-option {
   display: grid; justify-items: center; gap: 6px; padding: 10px 4px; cursor: pointer;
   background: #14121f; color: inherit; border: 2px solid #3b3755; border-radius: 12px;
