@@ -24,3 +24,44 @@ button, input { font: inherit; }
 .mono { font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
 table { width: 100%; border-collapse: collapse; }
 td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid #3b3755; }
+
+/* ───── 3D 화면 (/play, /display) ───── */
+.stage {
+  position: fixed; inset: 0; overflow: hidden;
+  touch-action: none; user-select: none; -webkit-user-select: none;
+  -webkit-touch-callout: none;
+}
+.hud {
+  position: absolute; top: 12px; left: 12px; right: 12px; pointer-events: none;
+  background: rgba(20, 18, 31, .55); border-radius: 10px; padding: 8px 10px; width: fit-content; max-width: calc(100% - 24px);
+}
+.hint {
+  position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+  background: rgba(20, 18, 31, .55); padding: 6px 12px; border-radius: 999px; font-size: 14px;
+  pointer-events: none; white-space: nowrap;
+}
+.nameplate {
+  background: rgba(20, 18, 31, .7); color: #fff; padding: 2px 8px; border-radius: 999px;
+  font-size: 12px; white-space: nowrap; pointer-events: none; user-select: none;
+}
+.nameplate.self { background: #6c5cff; }
+
+/* 가상 조이스틱 */
+.joystick {
+  position: absolute; left: max(24px, env(safe-area-inset-left)); bottom: max(32px, env(safe-area-inset-bottom));
+  width: 140px; height: 140px; border-radius: 50%;
+  background: rgba(255, 255, 255, .18); border: 2px solid rgba(255, 255, 255, .35);
+  display: grid; place-items: center; touch-action: none;
+}
+.joystick-knob {
+  width: 60px; height: 60px; border-radius: 50%;
+  background: rgba(255, 255, 255, .85); box-shadow: 0 4px 12px rgba(0, 0, 0, .25);
+  pointer-events: none; will-change: transform;
+}
+.jump-button {
+  position: absolute; right: max(24px, env(safe-area-inset-right)); bottom: max(48px, env(safe-area-inset-bottom));
+  width: 96px; height: 96px; border-radius: 50%; border: 0;
+  background: rgba(108, 92, 255, .85); color: #fff; font-weight: 700; letter-spacing: 1px;
+  touch-action: none;
+}
+.jump-button:active { transform: scale(.94); }

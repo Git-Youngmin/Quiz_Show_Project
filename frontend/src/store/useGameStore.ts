@@ -63,7 +63,7 @@ const SEND_INTERVAL_MS = 50; // 최대 20Hz 로 전송 (서버 15Hz 틱보다 �
 const PING_INTERVAL_MS = 5000;
 const MAX_RECONNECT_DELAY_MS = 10_000;
 /** 이 값보다 작게 움직이면 전송 생략 */
-const MOVE_EPSILON = 0.001;
+const MOVE_EPSILON = 0.01;
 
 let socket: WebSocket | null = null;
 let connectOpts: ConnectOptions | null = null;
@@ -321,3 +321,8 @@ export const useGameStore = create<GameState>()((set, get) => {
 /** 내 플레이어 정보 (입·퇴장/스냅샷 시 갱신) */
 export const useSelf = () =>
   useGameStore((s) => (s.selfId ? s.players[s.selfId] : undefined));
+
+// 개발 중 콘솔/E2E 테스트에서 상태 확인용
+if (import.meta.env.DEV) {
+  (window as unknown as { __gameStore: typeof useGameStore }).__gameStore = useGameStore;
+}
