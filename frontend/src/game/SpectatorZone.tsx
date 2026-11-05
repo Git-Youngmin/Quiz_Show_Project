@@ -3,44 +3,57 @@ import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
 import type { MeshStandardMaterial } from "three";
-import { THROW_PADS, THROW_PAD_SIZE, throwOrigin } from "@quiz/shared";
+import { SPECTATOR_ZONES, THROW_PADS, THROW_PAD_SIZE, type SpectatorZoneDef } from "@quiz/shared";
 import { useGameStore } from "../store/useGameStore";
-import { SPECTATOR_ZONE } from "./constants";
 
 const FLOOR_T = 0.6;
 const WALL_T = 0.3;
+const PAD_COLOR = "#ff3d9a";
 
 /**
- * 탈락자 관전 구역 — 보드 왼쪽 바깥의 밀폐된 유리 상자 (type="fixed").
- * 바닥 + 사방 벽 + 천장 콜라이더로 막혀 있어 안에서는 자유롭게 뛰어다닐 수 있지만
- * 메인 퀴즈 보드로는 나갈 수 없다. (보드 쪽 벽은 투명해서 퀴즈를 잘 볼 수 있음)
- *
- * 보드 쪽 바닥에는 투척 발판(센서)이 있어, 밟으면 벽 너머 발사대에서 방해물이 날아간다.
+ * 탈락자 관전석 — 보드 뒤쪽 좌·우 대각선 위에 하나씩 (type="fixed").
+ * 탈락자는 둘 중 무작위 관전석으로 리스폰된다 (LocalPlayer).
  */
-export function SpectatorZone() {
-  const [cx, cy, cz] = SPECTATOR_ZONE.center;
-  const [sx, sz] = SPECTATOR_ZONE.size;
-  const wh = SPECTATOR_ZONE.wallHeight;
-  const ch = SPECTATOR_ZONE.ceilingHeight;
+export function SpectatorZones() {
+  return (
+    <>
+      {SPECTATOR_ZONES.map((zone, i) => (
+        <SpectatorBox key={i} zone={zone} index={i} />
+      ))}
+    </>
+  );
+}
 
-  // [위치, 반크기] — 벽은 발판 윗면(y=0 기준 로컬) 위로 세움
+/**
+ * 관전석 하나 — 보드 중심을 바라보도록 회전한 밀폐 유리 상자.
+ * 로컬 +x = 보드 방향(앞), 로컬 z = 좌우. 바닥 + 사방 벽 + 천장 콜라이더로 막혀 있어
+ * 안에서는 자유롭게 뛰어다닐 수 있지만 메인 보드로는 나갈 수 없다.
+ * 앞쪽 바닥에는 투척 발판(센서), 앞 벽 꼭대기에는 발사대가 있다.
+ */
+function SpectatorBox({ zone, index }: { zone: SpectatorZoneDef; index: number }) {
+  const [depth, width] = zone.size;
+  const wh = zone.wallHeight;
+  const ch = zone.ceilingHeight;
+  const pads = THROW_PADS.map((p, i) => ({ ...p, index: i })).filter((p) => p.zone === index);
+
+  // [위치, 반크기] — 벽은 바닥 윗면(로컬 y=0) 위로 세움
   const walls: { pos: [number, number, number]; half: [number, number, number] }[] = [
-    { pos: [sx / 2, wh / 2, 0], half: [WALL_T / 2, wh / 2, sz / 2] }, // 보드 쪽(+x)
-    { pos: [-sx / 2, wh / 2, 0], half: [WALL_T / 2, wh / 2, sz / 2] },
-    { pos: [0, wh / 2, sz / 2], half: [sx / 2, wh / 2, WALL_T / 2] },
-    { pos: [0, wh / 2, -sz / 2], half: [sx / 2, wh / 2, WALL_T / 2] },
+    { pos: [depth / 2, wh / 2, 0], half: [WALL_T / 2, wh / 2, width / 2] }, // 앞(보드 쪽)
+    { pos: [-depth / 2, wh / 2, 0], half: [WALL_T / 2, wh / 2, width / 2] },
+    { pos: [0, wh / 2, width / 2], half: [depth / 2, wh / 2, WALL_T / 2] },
+    { pos: [0, wh / 2, -width / 2], half: [depth / 2, wh / 2, WALL_T / 2] },
   ];
 
   return (
-    <RigidBody type="fixed" colliders={false} position={[cx, cy, cz]} friction={1}>
-      {/* 발판 */}
-      <CuboidCollider args={[sx / 2, FLOOR_T / 2, sz / 2]} position={[0, -FLOOR_T / 2, 0]} />
+    <RigidBody type="fixed" colliders={false} position={zone.center} rotation={[0, zone.yaw, 0]} friction={1}>
+      {/* 바닥 */}
+      <CuboidCollider args={[depth / 2, FLOOR_T / 2, width / 2]} position={[0, -FLOOR_T / 2, 0]} />
       <mesh position={[0, -FLOOR_T / 2, 0]} receiveShadow castShadow>
-        <boxGeometry args={[sx, FLOOR_T, sz]} />
+        <boxGeometry args={[depth, FLOOR_T, width]} />
         <meshStandardMaterial color="#3a335c" />
       </mesh>
       <mesh position={[0, 0.01, 0]} rotation-x={-Math.PI / 2} receiveShadow>
-        <planeGeometry args={[sx - 0.6, sz - 0.6]} />
+        <planeGeometry args={[depth - 0.6, width - 0.6]} />
         <meshStandardMaterial color="#5a4f8c" />
       </mesh>
 
@@ -52,7 +65,6 @@ export function SpectatorZone() {
             <boxGeometry args={[half[0] * 2, half[1] * 2, half[2] * 2]} />
             <meshStandardMaterial color="#c9e9ff" transparent opacity={0.16} depthWrite={false} />
           </mesh>
-          {/* 상단 테두리 */}
           <mesh position={[pos[0], wh, pos[2]]}>
             <boxGeometry args={[Math.max(half[0] * 2, 0.12), 0.12, Math.max(half[2] * 2, 0.12)]} />
             <meshStandardMaterial color="#ffffff" />
@@ -61,21 +73,21 @@ export function SpectatorZone() {
       ))}
 
       {/* 보이지 않는 천장 — 점프로 벽을 넘는 것을 원천 차단 */}
-      <CuboidCollider args={[sx / 2, 0.2, sz / 2]} position={[0, ch, 0]} />
+      <CuboidCollider args={[depth / 2, 0.2, width / 2]} position={[0, ch, 0]} />
 
-      {THROW_PADS.map((p, i) => (
-        <ThrowPad key={i} index={i} local={[p.x - cx, p.z - cz]} />
+      {pads.map((p) => (
+        <ThrowPad key={p.index} index={p.index} local={p.local} />
+      ))}
+      {pads.map((p) => (
+        <Launcher key={p.index} position={[depth / 2, wh + 0.1, p.local[1]]} />
       ))}
 
-      <Html position={[0, wh + 0.8, 0]} center zIndexRange={[10, 0]}>
-        <div className="zone-label">관전석 · 앞쪽 발판을 밟으면 방해물 발사!</div>
+      <Html position={[-depth / 4, wh + 0.8, 0]} center zIndexRange={[10, 0]}>
+        <div className="zone-label">관전석 · 분홍 발판을 밟으면 방해물 발사!</div>
       </Html>
-      <Launchers origin={[cx, cy, cz]} />
     </RigidBody>
   );
 }
-
-const PAD_COLOR = "#ff3d9a";
 
 /**
  * 투척 발판 — 바닥에 깔린 형광 발판 + sensor 충돌체.
@@ -104,16 +116,16 @@ function ThrowPad({ index, local }: { index: number; local: [number, number] }) 
         args={[half, 0.6, half]}
         position={[0, 0.6, 0]}
         onIntersectionEnter={({ other }) => {
-          if ((other.rigidBodyObject?.userData as { localPlayer?: boolean } | undefined)?.localPlayer) {
-            useGameStore.getState().throwItem(index);
-          }
+          if (!(other.rigidBodyObject?.userData as { localPlayer?: boolean } | undefined)?.localPlayer) return;
+          const t = other.rigidBody?.translation();
+          useGameStore.getState().throwItem(index, t ? [t.x, t.y, t.z] : undefined);
         }}
       />
       <mesh position={[0, 0.03, 0]} rotation-x={-Math.PI / 2} receiveShadow>
         <planeGeometry args={[THROW_PAD_SIZE, THROW_PAD_SIZE]} />
         <meshStandardMaterial ref={mat} color={PAD_COLOR} emissive={PAD_COLOR} emissiveIntensity={0.5} />
       </mesh>
-      {/* 보드 방향(+x) 화살표 */}
+      {/* 보드 방향(로컬 +x) 화살표 */}
       <mesh position={[0.15, 0.05, 0]} rotation-x={-Math.PI / 2} rotation-z={-Math.PI / 2}>
         <circleGeometry args={[0.7, 3]} />
         <meshStandardMaterial color="#ffffff" />
@@ -126,31 +138,19 @@ function ThrowPad({ index, local }: { index: number; local: [number, number] }) 
   );
 }
 
-/**
- * 보드 쪽 유리벽 꼭대기의 발사대 — 순수 장식(콜라이더 없음).
- * 포신 끝이 throwOrigin() 을 향하도록 배치해 방해물이 포구에서 튀어나오는 것처럼 보이게 한다.
- */
-function Launchers({ origin }: { origin: [number, number, number] }) {
-  const wallX = SPECTATOR_ZONE.size[0] / 2;
-  const wallTop = SPECTATOR_ZONE.wallHeight;
+/** 앞 벽 꼭대기의 발사대 — 포구에서 방해물이 튀어나오는 것처럼 보이게 하는 장식(콜라이더 없음) */
+function Launcher({ position }: { position: [number, number, number] }) {
   return (
-    <>
-      {THROW_PADS.map((_, i) => {
-        const [, , z] = throwOrigin(i);
-        return (
-          <group key={i} position={[wallX, wallTop + 0.1, z - origin[2]]}>
-            <mesh>
-              <cylinderGeometry args={[0.25, 0.32, 0.18, 16]} />
-              <meshStandardMaterial color="#3a335c" />
-            </mesh>
-            {/* 보드 쪽(+x)으로 45° 기울어진 포신 — 관전 시야를 가리지 않게 작게 */}
-            <mesh position={[0.22, 0.26, 0]} rotation-z={-Math.PI / 4}>
-              <cylinderGeometry args={[0.13, 0.17, 0.6, 16]} />
-              <meshStandardMaterial color={PAD_COLOR} emissive={PAD_COLOR} emissiveIntensity={0.3} />
-            </mesh>
-          </group>
-        );
-      })}
-    </>
+    <group position={position}>
+      <mesh>
+        <cylinderGeometry args={[0.25, 0.32, 0.18, 16]} />
+        <meshStandardMaterial color="#3a335c" />
+      </mesh>
+      {/* 보드 쪽(로컬 +x)으로 45° 기울어진 포신 */}
+      <mesh position={[0.22, 0.26, 0]} rotation-z={-Math.PI / 4}>
+        <cylinderGeometry args={[0.13, 0.17, 0.6, 16]} />
+        <meshStandardMaterial color={PAD_COLOR} emissive={PAD_COLOR} emissiveIntensity={0.3} />
+      </mesh>
+    </group>
   );
 }

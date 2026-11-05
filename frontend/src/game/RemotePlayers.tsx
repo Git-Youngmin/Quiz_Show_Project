@@ -3,7 +3,7 @@ import { useFrame } from "@react-three/fiber";
 import { CapsuleCollider, RigidBody, type RapierCollider, type RapierRigidBody } from "@react-three/rapier";
 import { Vector3, type Group } from "three";
 import { useGameStore } from "../store/useGameStore";
-import { Character } from "./Character";
+import { Character, type CharacterMotion } from "./Character";
 import { CAPSULE_HALF_HEIGHT, CAPSULE_RADIUS } from "./constants";
 
 /** 이 거리 이상 차이 나면 보간 없이 순간이동 (리스폰 등) */
@@ -53,6 +53,9 @@ function RemotePlayer({ id }: { id: string }) {
   const current = useMemo(() => new Vector3(...initial), [initial]);
   const target = useMemo(() => new Vector3(), []);
   const rotY = useRef(0);
+  /** 보간된 위치 변화량으로 추정한 움직임 (팔다리 애니메이션용) */
+  const motion = useRef<CharacterMotion>({ speed: 0, airborne: false, vy: 0 });
+  const prev = useMemo(() => new Vector3(...initial), [initial]);
 
   useFrame((_, delta) => {
     const p = useGameStore.getState().players[id];
@@ -66,6 +69,18 @@ function RemotePlayer({ id }: { id: string }) {
     }
     body.current.setNextKinematicTranslation(current);
 
+    // 이번 프레임 이동량 → 속도 추정 (지수 평활로 떨림 제거)
+    const dt = Math.max(1e-3, Math.min(delta, 0.1));
+    const k = 1 - Math.exp(-dt * 10);
+    const m = motion.current;
+    if (prev.distanceTo(current) < 2) {
+      // (순간이동한 프레임은 건너뜀 — 속도가 튀지 않게)
+      m.speed += (Math.hypot(current.x - prev.x, current.z - prev.z) / dt - m.speed) * k;
+      m.vy += ((current.y - prev.y) / dt - m.vy) * k;
+      m.airborne = Math.abs(m.vy) > 1.2;
+    }
+    prev.copy(current);
+
     // 회전도 최단 경로로 보간
     let d = ((p.r - rotY.current + Math.PI) % (Math.PI * 2)) - Math.PI;
     if (d < -Math.PI) d += Math.PI * 2;
@@ -78,7 +93,7 @@ function RemotePlayer({ id }: { id: string }) {
       {/* 외형과 무관하게 동일한 캡슐 충돌체 */}
       <CapsuleCollider ref={collider} args={[CAPSULE_HALF_HEIGHT, CAPSULE_RADIUS]} />
       <group ref={visual}>
-        <Character color={color} shape={shape} name={name} />
+        <Character color={color} shape={shape} name={name} motion={motion} />
       </group>
     </RigidBody>
   );

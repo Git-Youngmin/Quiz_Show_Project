@@ -14,7 +14,7 @@ import { VirtualJoystick, shouldShowJoystick } from "../game/input/VirtualJoysti
 import { World } from "../game/World";
 import { LocalPlayer } from "../game/LocalPlayer";
 import { RemotePlayers } from "../game/RemotePlayers";
-import { CAMERA_OFFSET } from "../game/constants";
+import { CAMERA_OFFSET, PHYSICS_GRAVITY } from "../game/constants";
 
 /** 참가자 3D 뷰: PC(WASD/방향키 + Space) / 모바일(가상 조이스틱 + 점프 버튼) */
 export default function PlayPage() {
@@ -37,7 +37,7 @@ function PlayScene() {
       <div className="stage">
         <Canvas shadows camera={{ position: CAMERA_OFFSET, fov: 50 }} dpr={[1, 2]}>
           <Suspense fallback={null}>
-            <Physics>
+            <Physics gravity={PHYSICS_GRAVITY}>
               <World />
               <SelfPlayer />
               <RemotePlayers />

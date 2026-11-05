@@ -8,6 +8,7 @@ import { ThrowFeed } from "../components/ThrowFeed";
 import { useGameAudio } from "../audio/useGameAudio";
 import { useRoomConnection } from "../lib/useRoomConnection";
 import { World } from "../game/World";
+import { PHYSICS_GRAVITY } from "../game/constants";
 import { RemotePlayers } from "../game/RemotePlayers";
 import { CameraDirector } from "../game/CameraDirector";
 
@@ -24,7 +25,7 @@ export default function DisplayPage() {
       <Canvas shadows dpr={[1, 2]}>
         <CameraDirector />
         <Suspense fallback={null}>
-          <Physics>
+          <Physics gravity={PHYSICS_GRAVITY}>
             <World />
             <RemotePlayers />
           </Physics>

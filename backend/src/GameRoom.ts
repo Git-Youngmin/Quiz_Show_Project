@@ -16,10 +16,9 @@ import {
   BOARD_SIZE,
   GRAVITY,
   ITEM_KINDS,
-  SPECTATOR_ZONE,
   THROW_COOLDOWN_MS,
   THROW_PADS,
-  THROW_PAD_SIZE,
+  isOnThrowPad,
   throwOrigin,
   CHARACTER_COLORS,
   FELL_Y,
@@ -313,13 +312,7 @@ export class GameRoom {
     if (typeof pad !== "number" || !Number.isInteger(pad) || !THROW_PADS[pad]) return;
 
     // 위치 검증: 서버가 마지막으로 받은 위치가 해당 발판 위여야 함 (스냅샷 지연을 고려해 여유 있게)
-    const p = THROW_PADS[pad];
-    const reach = THROW_PAD_SIZE / 2 + 1.2;
-    const onPad =
-      Math.abs(pl.p[0] - p.x) <= reach &&
-      Math.abs(pl.p[2] - p.z) <= reach &&
-      pl.p[1] > SPECTATOR_ZONE.center[1] - 1;
-    if (!onPad) return;
+    if (!isOnThrowPad(pad, pl.p)) return;
 
     // 쿨타임: 유저당 2초 + 방 전체 0.5초 (무한 투척으로 인한 부하/렌더링 저하 방지)
     const now = Date.now();
@@ -335,10 +328,11 @@ export class GameRoom {
 
     const origin = throwOrigin(pad);
     const target = this.pickThrowTarget();
-    const { direction, speed } = ballistic(origin, target, 1.25 + Math.random() * 0.4);
+    // 중력이 세서(30) 비행 시간을 짧게 → 빠르고 날카로운 포물선
+    const { direction, speed } = ballistic(origin, target, 0.95 + Math.random() * 0.3);
     const item: ThrownItem = {
       id: this.nextItemId++,
-      kind: ITEM_KINDS[Math.floor(Math.random() * ITEM_KINDS.length)],
+      kind: pickItemKind(),
       origin,
       direction,
       speed,
@@ -542,6 +536,12 @@ function sanitizeVec3(v: unknown): Vec3 | null {
   if (!out.every(Number.isFinite)) return null;
   const clamp = (n: number) => Math.max(-WORLD_BOUNDS, Math.min(WORLD_BOUNDS, n));
   return [clamp(out[0]), clamp(out[1]), clamp(out[2])];
+}
+
+/** 방해물 종류: 바나나 50% · 상자 25% · 공 25% */
+function pickItemKind() {
+  const r = Math.random();
+  return r < 0.5 ? ITEM_KINDS[0] : r < 0.75 ? ITEM_KINDS[1] : ITEM_KINDS[2];
 }
 
 function clampN(n: number, min: number, max: number) {

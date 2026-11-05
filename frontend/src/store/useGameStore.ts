@@ -93,8 +93,11 @@ interface StoreState {
   sendMove: (x: number, y: number, z: number, rotY?: number) => void;
   /** 플레이어: 맵 밖으로 떨어졌음을 서버에 보고 (진행 중이면 탈락) */
   reportFell: () => void;
-  /** 탈락자: 투척 발판을 밟음 → 방해물 발사 요청 */
-  throwItem: (pad: number) => void;
+  /**
+   * 탈락자: 투척 발판을 밟음 → 방해물 발사 요청.
+   * at = 발판을 밟은 순간의 내 위치 (서버의 "발판 위인지" 검증용으로 요청 직전에 전송)
+   */
+  throwItem: (pad: number, at?: Vec3) => void;
   /** 수명이 다한 방해물 제거 */
   removeObstacle: (id: number) => void;
   /** 관리자: 문제 출제 (OX / 4지선다) */
@@ -394,14 +397,19 @@ export const useGameStore = create<StoreState>()((set, get) => {
       });
     },
 
-    throwItem: (pad) => {
+    throwItem: (pad, at) => {
       const { selfId, players, throwReadyAt } = get();
       const me = selfId ? players[selfId] : undefined;
       if (!me || me.alive || Date.now() < throwReadyAt) return;
-      // 서버는 마지막으로 받은 위치로 "발판 위인지" 검사 → 스로틀링 대기 중인 위치를 먼저 전송
-      // (같은 소켓이라 순서 보장)
-      if (pendingMove) {
-        if (pendingMoveTimer) clearTimeout(pendingMoveTimer);
+      // 서버는 마지막으로 받은 위치로 "발판 위인지" 검사한다.
+      // 센서 이벤트는 물리 스텝 중에 오므로 이번 프레임 위치가 아직 전송 대기열에 없을 수 있다
+      // → 밟은 순간의 정확한 위치를 투척 요청 직전에 보낸다 (같은 소켓이라 순서 보장)
+      if (pendingMoveTimer) clearTimeout(pendingMoveTimer);
+      pendingMoveTimer = null;
+      if (at) {
+        pendingMove = { p: at, r: lastSent?.r ?? 0 };
+        flushMove();
+      } else if (pendingMove) {
         flushMove();
       }
       // 낙관적으로 쿨타임 시작 (서버가 거부하면 throw_cooldown 으로 보정)

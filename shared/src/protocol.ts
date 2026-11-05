@@ -217,24 +217,81 @@ export const MAX_PLAYERS_PER_ROOM = 100;
 // ───────────── 탈락자 관전석 / 방해물 투척 ─────────────
 
 /**
- * 관전석: 보드 왼쪽 바깥의 밀폐된 유리 상자. center.y = 발판 윗면 높이.
- * 보드 쪽(+x) 벽 = center.x + size.x / 2
+ * 관전석 하나 (밀폐된 유리 상자). 보드 중심을 바라보도록 y 축으로 회전돼 있다.
+ *  - 로컬 +x(forward) = 보드 중심 방향, 로컬 +z(right) = 오른쪽
+ *  - center.y = 바닥 윗면 높이, size = [깊이(로컬 x), 너비(로컬 z)]
  */
-export const SPECTATOR_ZONE = {
-  center: [-30, 3, 0] as Vec3,
-  size: [18, 28] as [number, number],
-  wallHeight: 4, // 점프 최고점(약 2.5) 보다 높게
-  ceilingHeight: 5.5, // 천장 콜라이더로 완전히 밀폐
-} as const;
+export interface SpectatorZoneDef {
+  center: Vec3;
+  /** RigidBody rotation-y (로컬 +x 가 forward 를 향하도록) */
+  yaw: number;
+  forward: [number, number];
+  right: [number, number];
+  size: [number, number];
+  wallHeight: number;
+  ceilingHeight: number;
+}
 
-const ZONE_INNER_X = SPECTATOR_ZONE.center[0] + SPECTATOR_ZONE.size[0] / 2; // 보드 쪽 벽 x
+function makeZone(cx: number, cz: number): SpectatorZoneDef {
+  const len = Math.hypot(cx, cz);
+  const f: [number, number] = [-cx / len, -cz / len]; // 보드 중심 방향
+  // y 축 회전 θ 에서 로컬 x → (cosθ, -sinθ), 로컬 z → (sinθ, cosθ)
+  return {
+    center: [cx, 3, cz],
+    yaw: Math.atan2(-f[1], f[0]),
+    forward: f,
+    right: [-f[1], f[0]],
+    size: [12, 16],
+    wallHeight: 4, // 점프 최고점(약 1.9) 보다 충분히 높게
+    ceilingHeight: 5.5, // 천장 콜라이더로 완전히 밀폐
+  };
+}
 
-/** 투척 발판 (관전석 바닥 앞쪽, 보드를 향한 벽 앞에 일렬) — 월드 좌표 */
+/** 보드 뒤쪽 좌·우 대각선 위의 관전석 2곳 (화면 위쪽 = -z) */
+export const SPECTATOR_ZONES: readonly SpectatorZoneDef[] = [makeZone(-22, -23), makeZone(22, -23)];
+
+/** 관전석 로컬 좌표(lx: 앞뒤, lz: 좌우) → 월드 (x, z) */
+export function zoneToWorld(zone: SpectatorZoneDef, lx: number, lz: number): [number, number] {
+  return [
+    zone.center[0] + zone.forward[0] * lx + zone.right[0] * lz,
+    zone.center[2] + zone.forward[1] * lx + zone.right[1] * lz,
+  ];
+}
+
+/** 월드 (x, z) → 관전석 로컬 좌표 */
+export function worldToZone(zone: SpectatorZoneDef, x: number, z: number): [number, number] {
+  const dx = x - zone.center[0];
+  const dz = z - zone.center[2];
+  return [dx * zone.forward[0] + dz * zone.forward[1], dx * zone.right[0] + dz * zone.right[1]];
+}
+
+/** 투척 발판: 각 관전석 앞쪽(보드 방향 벽 앞)에 2개씩 */
 export const THROW_PAD_SIZE = 2.4;
-export const THROW_PADS: readonly { x: number; z: number }[] = [-8, 0, 8].map((z) => ({
-  x: ZONE_INNER_X - THROW_PAD_SIZE / 2 - 0.6,
-  z,
-}));
+export interface ThrowPadDef {
+  zone: number;
+  /** 관전석 로컬 좌표 */
+  local: [number, number];
+  /** 월드 좌표 */
+  x: number;
+  z: number;
+}
+export const THROW_PADS: readonly ThrowPadDef[] = SPECTATOR_ZONES.flatMap((zone, zi) =>
+  [-3.5, 3.5].map((lz) => {
+    const lx = zone.size[0] / 2 - THROW_PAD_SIZE / 2 - 0.6;
+    const [x, z] = zoneToWorld(zone, lx, lz);
+    return { zone: zi, local: [lx, lz] as [number, number], x, z };
+  }),
+);
+
+/** 플레이어 위치가 해당 발판 위인지 (서버 검증용, 위치 지연을 고려한 여유 margin) */
+export function isOnThrowPad(pad: number, p: Vec3, margin = 1.2): boolean {
+  const def = THROW_PADS[pad];
+  if (!def) return false;
+  const zone = SPECTATOR_ZONES[def.zone];
+  const [lx, lz] = worldToZone(zone, p[0], p[2]);
+  const reach = THROW_PAD_SIZE / 2 + margin;
+  return Math.abs(lx - def.local[0]) <= reach && Math.abs(lz - def.local[1]) <= reach && p[1] > zone.center[1] - 1;
+}
 
 export type ItemKind = "banana" | "crate" | "ball";
 export const ITEM_KINDS: readonly ItemKind[] = ["banana", "crate", "ball"];
@@ -260,16 +317,21 @@ export const THROW_COOLDOWN_MS = {
 } as const;
 /** 방해물 수명 — 이후 자동 제거 */
 export const ITEM_LIFETIME_MS = 7000;
-/** 물리 엔진 중력 (Rapier 기본값과 동일) — 서버 궤적 계산용 */
-export const GRAVITY = 9.81;
+/**
+ * 물리 엔진 중력 크기 (m/s²). 폴가이즈처럼 빠릿하게 떨어지도록 실제(9.81)의 약 3배.
+ * 클라이언트 <Physics gravity> 와 서버 궤적 계산이 같은 값을 써야 방해물이 보드에 떨어진다.
+ */
+export const GRAVITY = 30;
 
 /**
- * 발판 번호 → 발사 위치: 보드 쪽 유리벽 꼭대기 발사대의 포구.
+ * 발판 번호 → 발사 위치: 해당 관전석 보드 쪽 유리벽 꼭대기 발사대의 포구.
  * 벽 바깥면에서 1유닛 이상 떨어져 있어 가장 큰 방해물(반지름 0.55)도 벽/천장과 겹치지 않음.
  */
 export function throwOrigin(pad: number): Vec3 {
-  const p = THROW_PADS[pad];
-  return [ZONE_INNER_X + 1.2, SPECTATOR_ZONE.center[1] + SPECTATOR_ZONE.wallHeight + 1, p.z];
+  const def = THROW_PADS[pad];
+  const zone = SPECTATOR_ZONES[def.zone];
+  const [x, z] = zoneToWorld(zone, zone.size[0] / 2 + 1.2, def.local[1]);
+  return [x, zone.center[1] + zone.wallHeight + 1, z];
 }
 
 // ───────────── 관리자 인증 ─────────────

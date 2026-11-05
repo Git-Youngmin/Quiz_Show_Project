@@ -1,6 +1,6 @@
 import { QuizBoard } from "./QuizBoard";
 import { Barrier } from "./Barrier";
-import { SpectatorZone } from "./SpectatorZone";
+import { SpectatorZones } from "./SpectatorZone";
 import { WinnerCelebration } from "./Confetti";
 import { Obstacles } from "./Obstacles";
 
@@ -16,14 +16,15 @@ export function World() {
         intensity={1.6}
         castShadow
         shadow-mapSize={[2048, 2048]}
-        shadow-camera-left={-34}
-        shadow-camera-right={20}
-        shadow-camera-top={20}
-        shadow-camera-bottom={-20}
+        shadow-camera-far={80}
+        shadow-camera-left={-36}
+        shadow-camera-right={36}
+        shadow-camera-top={36}
+        shadow-camera-bottom={-36}
       />
       <QuizBoard />
       <Barrier />
-      <SpectatorZone />
+      <SpectatorZones />
       <WinnerCelebration />
       <Obstacles />
     </>

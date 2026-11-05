@@ -8,8 +8,8 @@ import { useGameStore } from "../store/useGameStore";
 import { BOARD_THICKNESS } from "./constants";
 import { ZONE_STYLE, tileLayouts, type TileLayout } from "./zones";
 
-/** 바닥이 꺼질 때 하강 가속도 — 중력(9.81)보다 커야 캐릭터가 바닥에서 떨어져 나감 */
-const DROP_ACCEL = 30;
+/** 바닥이 꺼질 때 하강 가속도 — 중력(30)보다 커야 캐릭터가 바닥에서 떨어져 나감 */
+const DROP_ACCEL = 48;
 const DROP_MIN_Y = -60;
 
 /**

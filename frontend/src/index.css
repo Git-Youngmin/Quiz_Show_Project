@@ -265,3 +265,39 @@ td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid #3b3755; }
   padding: 6px 12px; font-size: 15px; animation: feed-in .25s ease-out;
 }
 @keyframes feed-in { from { transform: translateX(-20px); opacity: 0; } }
+
+/* ───── 로비 미리보기: 젤리빈 팔다리 (3D Character 와 같은 구성) ───── */
+.avatar-body { bottom: 7%; }
+.avatar-capsule .avatar-body { width: 46%; height: 86%; }
+.avatar-box .avatar-body { width: 44%; height: 72%; border-radius: 18%; }
+.avatar-sphere .avatar-body { width: 64%; height: 64%; }
+.avatar-cone .avatar-body { width: 60%; height: 80%; }
+.avatar-foot {
+  position: absolute; bottom: 0; width: 16%; height: 10%; border-radius: 50%;
+  box-shadow: inset 0 -3px 0 rgba(0, 0, 0, .15);
+}
+.avatar-foot.l { left: 33%; }
+.avatar-foot.r { right: 33%; }
+.avatar-arm {
+  position: absolute; top: 48%; width: 15%; aspect-ratio: 1; border-radius: 50%;
+  box-shadow: inset -2px -3px 0 rgba(0, 0, 0, .12);
+}
+.avatar-arm.l { left: 19%; }
+.avatar-arm.r { right: 19%; }
+.avatar-sphere .avatar-arm { top: 52%; }
+.avatar-sphere .avatar-arm.l { left: 12%; } .avatar-sphere .avatar-arm.r { right: 12%; }
+.avatar-cone .avatar-arm { top: 58%; }
+.avatar-cone .avatar-arm.l { left: 24%; } .avatar-cone .avatar-arm.r { right: 24%; }
+.avatar-capsule .avatar-eyes { top: 22%; }
+.avatar-box .avatar-eyes { top: 34%; }
+.avatar-sphere .avatar-eyes { top: 42%; }
+.avatar-cone .avatar-eyes { top: 56%; }
+.avatar-eyes span { width: 14%; }
+.avatar-cheeks { position: absolute; display: flex; justify-content: center; gap: 22%; width: 100%; }
+.avatar-cheeks i { width: 8%; height: 4%; border-radius: 50%; background: #ff8fb1; opacity: .8; }
+.avatar-capsule .avatar-cheeks { top: 34%; }
+.avatar-box .avatar-cheeks { top: 46%; }
+.avatar-sphere .avatar-cheeks { top: 54%; }
+.avatar-cone .avatar-cheeks { top: 68%; gap: 14%; }
+/* 좁은 화면: 안내 문구 없이 아이콘만 (왼쪽 위 상태창과 겹치지 않게) */
+@media (max-width: 640px) { .sound-toggle-label { display: none; } .sound-toggle.locked { font-size: 18px; } }

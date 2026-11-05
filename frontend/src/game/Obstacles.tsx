@@ -100,21 +100,7 @@ function Obstacle({ item }: { item: ActiveObstacle }) {
 function ObstacleVisual({ kind }: { kind: ItemKind }) {
   switch (kind) {
     case "banana":
-      return (
-        <group rotation-z={Math.PI / 2}>
-          <mesh castShadow>
-            <capsuleGeometry args={[0.3, 0.7, 6, 12]} />
-            <meshStandardMaterial color="#ffe14d" roughness={0.5} emissive="#ffe14d" emissiveIntensity={0.25} />
-          </mesh>
-          {[-1, 1].map((s) => (
-            <mesh key={s} position={[0, s * 0.62, 0]}>
-              <sphereGeometry args={[0.1, 8, 8]} />
-              <meshStandardMaterial color="#6b4a1f" />
-            </mesh>
-          ))}
-          <Eyes y={0.05} z={0.27} spread={0.1} r={0.07} />
-        </group>
-      );
+      return <Banana />;
     case "crate":
       return (
         <group>
@@ -152,6 +138,33 @@ function ObstacleVisual({ kind }: { kind: ItemKind }) {
         </group>
       );
   }
+}
+
+/**
+ * 휜 바나나: 토러스의 일부(호)로 몸통을 만들고 양 끝에 갈색 꼭지.
+ * 호의 무게중심이 원점(충돌 캡슐 중심)에 오도록 아래로 내림.
+ */
+const BANANA = { R: 0.5, tube: 0.17, arc: Math.PI * 0.75 };
+const BANANA_SHIFT = (BANANA.R * Math.sin(BANANA.arc / 2)) / (BANANA.arc / 2); // 호의 무게중심 거리
+function Banana() {
+  const { R, tube, arc } = BANANA;
+  const start = Math.PI / 2 - arc / 2; // 호가 +y 를 중심으로 좌우 대칭이 되도록
+  const tip = (a: number): [number, number, number] => [Math.cos(a) * R, Math.sin(a) * R - BANANA_SHIFT, 0];
+  return (
+    <group>
+      <mesh rotation-z={start} position={[0, -BANANA_SHIFT, 0]} castShadow>
+        <torusGeometry args={[R, tube, 12, 24, arc]} />
+        <meshStandardMaterial color="#ffe14d" roughness={0.45} emissive="#ffe14d" emissiveIntensity={0.25} />
+      </mesh>
+      {[start, start + arc].map((a) => (
+        <mesh key={a} position={tip(a)}>
+          <sphereGeometry args={[tube * 0.75, 10, 8]} />
+          <meshStandardMaterial color="#6b4a1f" />
+        </mesh>
+      ))}
+      <Eyes y={R - BANANA_SHIFT + 0.02} z={tube * 0.85} spread={0.09} r={0.07} />
+    </group>
+  );
 }
 
 function Eyes({ y, z, spread, r }: { y: number; z: number; spread: number; r: number }) {

@@ -15,10 +15,19 @@ export function AvatarPreview({
 }) {
   return (
     <div className={`avatar avatar-${shape}`} style={{ width: size, height: size }} aria-hidden>
+      {/* 3D 젤리빈과 같은 구성: 발 2 + 몸통 + 팔 2 + 고글 눈 + 볼터치 */}
+      <div className="avatar-foot l" style={{ background: color }} />
+      <div className="avatar-foot r" style={{ background: color }} />
       <div className="avatar-body" style={{ background: color }} />
+      <div className="avatar-arm l" style={{ background: color }} />
+      <div className="avatar-arm r" style={{ background: color }} />
       <div className="avatar-eyes">
         <span />
         <span />
+      </div>
+      <div className="avatar-cheeks">
+        <i />
+        <i />
       </div>
     </div>
   );

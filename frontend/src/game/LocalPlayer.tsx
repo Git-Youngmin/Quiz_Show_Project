@@ -2,13 +2,14 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useFrame } from "@react-three/fiber";
 import {
   CapsuleCollider,
+  CoefficientCombineRule,
   RigidBody,
   useRapier,
   type RapierCollider,
   type RapierRigidBody,
 } from "@react-three/rapier";
 import { Vector3, type Group } from "three";
-import { FELL_Y, type CharacterShape, type Vec3 } from "@quiz/shared";
+import { FELL_Y, SPECTATOR_ZONES, type CharacterShape, type Vec3 } from "@quiz/shared";
 import { useGameStore } from "../store/useGameStore";
 import { usePlayerInput } from "./input/usePlayerInput";
 import { audio } from "../audio/AudioManager";
@@ -17,12 +18,16 @@ import {
   CAMERA_OFFSET,
   CAPSULE_HALF_HEIGHT,
   CAPSULE_RADIUS,
+  AIR_ACCEL,
   CHARACTER_CENTER_Y,
+  FALL_EXTRA_GRAVITY,
   FALL_LIMIT_Y,
+  GROUND_ACCEL,
   JUMP_VELOCITY,
   MOVE_SPEED,
   randomSpectatorSpawn,
 } from "./constants";
+import type { CharacterMotion } from "./Character";
 
 /** 최단 경로로 각도 보간 */
 function lerpAngle(a: number, b: number, t: number) {
@@ -64,13 +69,18 @@ export function LocalPlayer({ spawn, color, shape, name, alive }: Props) {
   // 처음부터 탈락 상태(진행 중 난입)라면 관전 구역에서 시작
   const [initialMode] = useState<Mode>(() => (alive ? "playing" : "spectating"));
   const mode = useRef<Mode>(initialMode);
-  const spawnPos = useMemo(
-    () =>
-      initialMode === "spectating"
-        ? randomSpectatorSpawn()
-        : { x: spawn[0], y: Math.max(spawn[1], CHARACTER_CENTER_Y + 0.5), z: spawn[2] },
-    [spawn, initialMode],
-  );
+  /** 내가 있는 관전석 번호 (관전 카메라 방향 결정) */
+  const spectatorZone = useRef(0);
+  const spawnPos = useMemo(() => {
+    if (initialMode === "spectating") {
+      const s = randomSpectatorSpawn();
+      spectatorZone.current = s.zone;
+      return s.pos;
+    }
+    return { x: spawn[0], y: Math.max(spawn[1], CHARACTER_CENTER_Y + 0.5), z: spawn[2] };
+  }, [spawn, initialMode]);
+  /** 외형 애니메이션(팔다리 흔들기, 착지 찌그러짐)에 넘겨줄 움직임 정보 */
+  const motion = useRef<CharacterMotion>({ speed: 0, airborne: false, vy: 0 });
 
   const rotY = useRef(0);
   const jumpHeld = useRef(false);
@@ -99,7 +109,9 @@ export function LocalPlayer({ spawn, color, shape, name, alive }: Props) {
     // ── 낙하 중: 조작 불가 → 충분히 떨어지면 관전 구역으로 순간이동 ──
     if (mode.current === "falling") {
       if (pos.y < FALL_LIMIT_Y) {
-        rb.setTranslation(randomSpectatorSpawn(), true);
+        const s = randomSpectatorSpawn(); // 두 관전석 중 무작위
+        spectatorZone.current = s.zone;
+        rb.setTranslation(s.pos, true);
         rb.setLinvel({ x: 0, y: 0, z: 0 }, true);
         collider.current?.setSensor(false); // 관전석 바닥/벽과 다시 충돌
         mode.current = "spectating";
@@ -114,10 +126,16 @@ export function LocalPlayer({ spawn, color, shape, name, alive }: Props) {
 
     // ── 입력을 카메라 기준 방향으로 변환 (관전석에서는 카메라가 옆을 보므로 필요) ──
     const input = getInput();
-    state.camera.getWorldDirection(camDir);
-    camDir.y = 0;
-    if (camDir.lengthSq() < 1e-6) camDir.set(0, 0, -1);
-    camDir.normalize();
+    if (mode.current === "spectating") {
+      // 관전석: 카메라가 따라오며 잠깐 비스듬해져도 W 는 정확히 관전석 정면(보드 방향) — 발판 겨냥이 쉽도록
+      const [fx, fz] = SPECTATOR_ZONES[spectatorZone.current].forward;
+      camDir.set(fx, 0, fz);
+    } else {
+      state.camera.getWorldDirection(camDir);
+      camDir.y = 0;
+      if (camDir.lengthSq() < 1e-6) camDir.set(0, 0, -1);
+      camDir.normalize();
+    }
     // forward = camDir, right = (-fz, fx)
     const moveX = -camDir.z * input.x + camDir.x * -input.z;
     const moveZ = camDir.x * input.x + camDir.z * -input.z;
@@ -132,19 +150,27 @@ export function LocalPlayer({ spawn, color, shape, name, alive }: Props) {
     // ── 수평 이동: 목표 속도로 부드럽게 가속 (공중에서는 조작감 낮춤) ──
     // 방해물에 맞은 직후에는 거의 조작이 안 먹혀서 밀려난 속도가 유지됨 (넉백 연출)
     const stunned = performance.now() < stunUntil.current;
-    const accel = 1 - Math.exp(-dt * (stunned ? 0.8 : grounded ? 14 : 4));
+    const accel = 1 - Math.exp(-dt * (stunned ? 0.8 : grounded ? GROUND_ACCEL : AIR_ACCEL));
     const vx = vel.x + (moveX * MOVE_SPEED - vel.x) * accel;
     const vz = vel.z + (moveZ * MOVE_SPEED - vel.z) * accel;
 
-    // ── 점프: 키를 누르는 순간(엣지)에만, 접지 상태에서 ──
+    // ── 묵직한 낙하: 내려오는 중에는 추가 중력 (올라갈 땐 가볍고 떨어질 땐 툭) ──
     let vy = vel.y;
+    if (!grounded && vy < 0) vy -= FALL_EXTRA_GRAVITY * dt;
+
+    rb.setLinvel({ x: vx, y: vy, z: vz }, true);
+
+    // ── 점프: 키를 누르는 순간(엣지)에만, 접지 상태에서 — 수직 속도를 JUMP_VELOCITY 로 만드는 임펄스 ──
     if (input.jump && !jumpHeld.current && grounded && !stunned) {
-      vy = JUMP_VELOCITY;
+      rb.applyImpulse({ x: 0, y: (JUMP_VELOCITY - vy) * rb.mass(), z: 0 }, true);
       audio.playSfx("jump", { rate: 0.93 + Math.random() * 0.14 }); // 매번 살짝 다른 높이
     }
     jumpHeld.current = input.jump;
 
-    rb.setLinvel({ x: vx, y: vy, z: vz }, true);
+    // 외형 애니메이션용
+    motion.current.speed = Math.hypot(vx, vz);
+    motion.current.airborne = !grounded;
+    motion.current.vy = vy;
 
     // ── 바라보는 방향: 이동 방향으로 회전 (강체는 회전 잠금, 외형만 회전) ──
     if (Math.hypot(moveX, moveZ) > 0.1) {
@@ -156,7 +182,9 @@ export function LocalPlayer({ spawn, color, shape, name, alive }: Props) {
     if (mode.current === "spectating") {
       // 관전 구역은 밀폐되어 있지만 만약을 대비
       if (pos.y < FALL_LIMIT_Y) {
-        rb.setTranslation(randomSpectatorSpawn(), true);
+        const s = randomSpectatorSpawn();
+        spectatorZone.current = s.zone;
+        rb.setTranslation(s.pos, true);
         rb.setLinvel({ x: 0, y: 0, z: 0 }, true);
       }
     } else if (store.game.phase === "waiting" || store.game.phase === "game_over") {
@@ -173,11 +201,12 @@ export function LocalPlayer({ spawn, color, shape, name, alive }: Props) {
     // ── 카메라 ──
     const p = rb.translation();
     if (mode.current === "spectating") {
-      // 관전: 내 캐릭터 뒤(-x) 위에서 보드 방향(+x)을 곧게 바라봄
+      // 관전: 내 캐릭터 뒤 위에서 관전석의 정면(보드 중심 방향)을 곧게 바라봄
       // → W = 보드(투척 발판) 쪽 직진, A/D = 좌우 이동이라 발판을 겨냥하기 쉬움
-      camWanted.set(p.x - 9, p.y + 6, p.z);
+      const [fx, fz] = SPECTATOR_ZONES[spectatorZone.current].forward;
+      camWanted.set(p.x - fx * 9, p.y + 6, p.z - fz * 9);
       state.camera.position.lerp(camWanted, 1 - Math.exp(-dt * 4));
-      camLook.lerp(tmp.set(p.x + 14, 0.5, p.z), 1 - Math.exp(-dt * 4));
+      camLook.lerp(tmp.set(p.x + fx * 14, 0.5, p.z + fz * 14), 1 - Math.exp(-dt * 4));
       state.camera.lookAt(camLook);
     } else {
       camLook.lerp(tmp.set(p.x, Math.max(p.y, 0), p.z), 1 - Math.exp(-dt * 8));
@@ -212,9 +241,15 @@ export function LocalPlayer({ spawn, color, shape, name, alive }: Props) {
     >
       {/* 외형과 무관하게 모두 같은 캡슐 충돌체 (공평성).
           friction 0: 속도를 직접 제어하므로 벽/다른 캐릭터에 달라붙지 않게 */}
-      <CapsuleCollider ref={collider} args={[CAPSULE_HALF_HEIGHT, CAPSULE_RADIUS]} friction={0} />
+      <CapsuleCollider
+        ref={collider}
+        args={[CAPSULE_HALF_HEIGHT, CAPSULE_RADIUS]}
+        friction={0}
+        // 마찰 합산 기본값은 "평균"이라 바닥(마찰 1)과 만나면 0.5 가 되어 속도가 깎임 → 최솟값(0)으로
+        frictionCombineRule={CoefficientCombineRule.Min}
+      />
       <group ref={visual}>
-        <Character color={color} shape={shape} name={name} isSelf />
+        <Character color={color} shape={shape} name={name} isSelf motion={motion} />
       </group>
     </RigidBody>
   );

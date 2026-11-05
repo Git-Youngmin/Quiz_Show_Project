@@ -7,8 +7,8 @@ export function SoundToggle() {
 
   if (locked && !muted) {
     return (
-      <button type="button" className="sound-toggle locked" onClick={() => audio.unlock()}>
-        🔇 클릭해서 사운드 켜기
+      <button type="button" className="sound-toggle locked" aria-label="사운드 켜기" onClick={() => audio.unlock()}>
+        🔇<span className="sound-toggle-label"> 클릭해서 사운드 켜기</span>
       </button>
     );
   }
