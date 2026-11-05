@@ -193,7 +193,7 @@ export const MAX_QUESTION_LENGTH = 200;
 export const MAX_CHOICE_LENGTH = 60;
 
 /** 퀴즈 보드 크기 (윗면 y = 0, 중심 원점). 구역 판정은 zoneAt() */
-export const BOARD_SIZE = 30;
+export const BOARD_SIZE = 22;
 /** 이 높이 아래 = 보드에서 떨어진 것으로 간주 */
 export const FELL_Y = -2;
 
@@ -244,9 +244,11 @@ export interface SpectatorZoneDef {
   size: [number, number];
   wallHeight: number;
   ceilingHeight: number;
+  /** 투척 발판들의 로컬 좌우 위치 (앞쪽 벽을 따라 일렬) */
+  padSlots: readonly number[];
 }
 
-function makeZone(cx: number, cz: number): SpectatorZoneDef {
+function makeZone(cx: number, cz: number, size: [number, number], padSlots: number[]): SpectatorZoneDef {
   const len = Math.hypot(cx, cz);
   const f: [number, number] = [-cx / len, -cz / len]; // 보드 중심 방향
   // y 축 회전 θ 에서 로컬 x → (cosθ, -sinθ), 로컬 z → (sinθ, cosθ)
@@ -255,14 +257,25 @@ function makeZone(cx: number, cz: number): SpectatorZoneDef {
     yaw: Math.atan2(-f[1], f[0]),
     forward: f,
     right: [-f[1], f[0]],
-    size: [12, 16],
-    wallHeight: 4, // 점프 최고점(약 1.9) 보다 충분히 높게
+    size,
+    wallHeight: 4, // 점프 최고점(약 2.4) 보다 충분히 높게
     ceilingHeight: 5.5, // 천장 콜라이더로 완전히 밀폐
+    padSlots,
   };
 }
 
-/** 보드 뒤쪽 좌·우 대각선 위의 관전석 2곳 (화면 위쪽 = -z) */
-export const SPECTATOR_ZONES: readonly SpectatorZoneDef[] = [makeZone(-22, -23), makeZone(22, -23)];
+/** 정면 관전석(그랜드스탠드): 깊이 8 × 가로 36 */
+const GRANDSTAND_SIZE: [number, number] = [8, 36];
+/** 보드 앞쪽 끝(+z)에서 관전석 앞벽까지 간격 */
+const GRANDSTAND_GAP = 4;
+
+/**
+ * 관전석 — 메인 카메라 기준 보드 정면 앞쪽(+z)에 가로로 길게 뻗은 단일 관전석.
+ * 앞벽(보드 쪽)을 따라 투척 버튼 5개가 같은 간격으로 놓인다.
+ */
+export const SPECTATOR_ZONES: readonly SpectatorZoneDef[] = [
+  makeZone(0, BOARD_SIZE / 2 + GRANDSTAND_GAP + GRANDSTAND_SIZE[0] / 2, GRANDSTAND_SIZE, [-14, -7, 0, 7, 14]),
+];
 
 /** 관전석 로컬 좌표(lx: 앞뒤, lz: 좌우) → 월드 (x, z) */
 export function zoneToWorld(zone: SpectatorZoneDef, lx: number, lz: number): [number, number] {
@@ -279,7 +292,7 @@ export function worldToZone(zone: SpectatorZoneDef, x: number, z: number): [numb
   return [dx * zone.forward[0] + dz * zone.forward[1], dx * zone.right[0] + dz * zone.right[1]];
 }
 
-/** 투척 발판: 각 관전석 앞쪽(보드 방향 벽 앞)에 2개씩 */
+/** 투척 발판(버튼): 관전석 앞쪽(보드 방향 벽 앞)을 따라 padSlots 위치에 */
 export const THROW_PAD_SIZE = 2.4;
 export interface ThrowPadDef {
   zone: number;
@@ -290,7 +303,7 @@ export interface ThrowPadDef {
   z: number;
 }
 export const THROW_PADS: readonly ThrowPadDef[] = SPECTATOR_ZONES.flatMap((zone, zi) =>
-  [-3.5, 3.5].map((lz) => {
+  zone.padSlots.map((lz) => {
     const lx = zone.size[0] / 2 - THROW_PAD_SIZE / 2 - 0.6;
     const [x, z] = zoneToWorld(zone, lx, lz);
     return { zone: zi, local: [lx, lz] as [number, number], x, z };

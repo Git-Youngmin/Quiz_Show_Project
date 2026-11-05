@@ -100,7 +100,7 @@ function FloorTile({ layout }: { layout: TileLayout }) {
         <meshStandardMaterial ref={topMat} color={color} emissive="#ffffff" emissiveIntensity={0} />
       </mesh>
       <ZoneMark zone={zone} scale={Math.min(w, d) / 15} />
-      {"ABCD".includes(zone) && <ChoiceLabel zone={zone} sx={sx} sz={sz} />}
+      {"ABCD".includes(zone) && <ChoiceLabel zone={zone} sx={sx} sz={sz} offset={Math.min(w, d) * 0.3} />}
     </RigidBody>
   );
 }
@@ -154,7 +154,7 @@ function ZoneMark({ zone, scale }: { zone: Answer; scale: number }) {
 }
 
 /** 4지선다 타일 바깥 모서리 쪽에 뜨는 보기 라벨 (A 화성 …) */
-function ChoiceLabel({ zone, sx, sz }: { zone: Answer; sx: number; sz: number }) {
+function ChoiceLabel({ zone, sx, sz, offset }: { zone: Answer; sx: number; sz: number; offset: number }) {
   const choices = useGameStore((s) => s.game.choices);
   const phase = useGameStore((s) => s.game.phase);
   const idx = "ABCD".indexOf(zone);
@@ -162,7 +162,7 @@ function ChoiceLabel({ zone, sx, sz }: { zone: Answer; sx: number; sz: number })
   // 카운트다운 중엔 보기를 가려서 긴장감 유지 (배너와 동일)
   const visible = !!text && phase !== "countdown";
   return (
-    <Html position={[sx * 4.2, 0.1, sz * 4.2]} center zIndexRange={[5, 0]}>
+    <Html position={[sx * offset, 0.1, sz * offset]} center zIndexRange={[5, 0]}>
       <div className={`choice-floor-label zone-${zone}`}>
         <b>{zone}</b>
         {visible && <span>{text}</span>}

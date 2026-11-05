@@ -5,7 +5,8 @@ import type { Group, MeshBasicMaterial, MeshStandardMaterial } from "three";
 import { BOARD_SIZE, isBarrierPhase } from "@quiz/shared";
 import { serverNow, useGameStore } from "../store/useGameStore";
 
-const HEIGHT = 3.2;
+/** 점프 최고점(발 높이 약 2.4)보다 높아야 넘어갈 수 없음 */
+const HEIGHT = 3.6;
 /** 타일 사이 틈(0.2)을 통과할 수 있는 두께 */
 const THICKNESS = 0.12;
 /** 숨어 있을 때 y — 보드 받침(두께 1) 아래로 완전히 내려감 */

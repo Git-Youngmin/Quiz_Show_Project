@@ -58,7 +58,8 @@ interface Session {
   player?: PlayerInfo;
 }
 
-const SPAWN_RADIUS = 6;
+/** 스폰 반경 — 보드(22×22) 가운데 쪽에 모이도록 */
+const SPAWN_RADIUS = 5;
 
 export class GameRoom {
   private sessions = new Map<WebSocket, Session>();
@@ -137,8 +138,9 @@ export class GameRoom {
           ? color.toLowerCase()
           : CHARACTER_COLORS[this.playerCount() % CHARACTER_COLORS.length],
         characterShape: isCharacterShape(shape) ? shape : "capsule",
-        // 문제 진행 중 난입한 플레이어는 관전으로 시작
-        alive: this.game.phase === "waiting",
+        // 로비/게임 종료 화면에서 들어오면 바로 참가 (다음 게임 시작 때 어차피 전원 부활).
+        // 문제 진행 중·라운드 결과 중 난입한 플레이어만 관전으로 시작
+        alive: this.game.phase === "waiting" || this.game.phase === "game_over",
         p: randomSpawn(),
         r: 0,
       };

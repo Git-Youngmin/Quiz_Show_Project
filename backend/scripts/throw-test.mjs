@@ -6,9 +6,9 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failed = 0;
 const check = (label, ok, extra = "") => { console.log(`${ok ? "✅" : "❌"} ${label}${extra ? ` — ${extra}` : ""}`); if (!ok) failed++; };
 
-// shared 의 SPECTATOR_ZONES / THROW_PADS 와 같은 값 (왼쪽 관전석 중심 (-22,-23), 보드 방향 forward)
-const ZONE0 = { c: [-22, -23], f: [0.6906, 0.7232] };
-const PADS = [{ x: -16.57, z: -22.38 }, { x: -21.63, z: -17.55 }, { x: 21.63, z: -17.55 }, { x: 16.57, z: -22.38 }];
+// shared 의 SPECTATOR_ZONES / THROW_PADS 와 같은 값 (정면 관전석 중심 (0, 19), 보드 방향 forward = -z)
+const ZONE0 = { c: [0, 19], f: [0, -1] };
+const PADS = [-14, -7, 0, 7, 14].map((x) => ({ x, z: 16.8 }));
 const PAD = PADS[1];
 const ZONE_Y = 3.8;
 
@@ -44,7 +44,7 @@ await sleep(3300); // countdown 끝
 send(bob, { type: "fell" }); send(carol, { type: "fell" });
 await sleep(150);
 send(bob, { type: "move", p: [PAD.x + 0.3, ZONE_Y, PAD.z - 0.2], r: 0 });
-send(carol, { type: "move", p: [PADS[2].x, ZONE_Y, PADS[2].z], r: 0 }); // 오른쪽 관전석 pad 2
+send(carol, { type: "move", p: [PADS[2].x, ZONE_Y, PADS[2].z], r: 0 }); // 가운데 버튼 pad 2
 await sleep(150);
 
 send(bob, { type: "throw_item", pad: 1 });
@@ -61,11 +61,11 @@ if (first) {
     const y = first.origin[1] + v[1] * t - 0.5 * 30 * t * t; // shared GRAVITY = 30
     if (t > 0.3 && y <= 0.6) { hit = [first.origin[0] + v[0] * t, first.origin[2] + v[2] * t, t]; break; }
   }
-  check("포물선 착지 지점이 보드 위", !!hit && Math.abs(hit[0]) < 15 && Math.abs(hit[1]) < 15,
+  check("포물선 착지 지점이 보드 위 (22×22)", !!hit && Math.abs(hit[0]) < 11 && Math.abs(hit[1]) < 11,
     hit && `x=${hit[0].toFixed(1)} z=${hit[1].toFixed(1)} t=${hit[2].toFixed(2)}s`);
-  // 관전석 로컬 앞뒤 좌표(lx)가 앞 벽 바깥면(6 + 0.15) + 방해물 반지름보다 커야 함
+  // 관전석 로컬 앞뒤 좌표(lx)가 앞 벽 바깥면(깊이 8 → 4 + 0.15) + 방해물 반지름보다 커야 함
   const lx = (first.origin[0] - ZONE0.c[0]) * ZONE0.f[0] + (first.origin[2] - ZONE0.c[1]) * ZONE0.f[1];
-  check("발사 위치가 관전석 유리벽 바깥(보드 쪽) + 벽보다 높음", lx > 6.15 + 0.55 && first.origin[1] > 3 + 4 + 0.55, `lx=${lx.toFixed(2)}`);
+  check("발사 위치가 관전석 유리벽 바깥(보드 쪽) + 벽보다 높음", lx > 4.15 + 0.55 && first.origin[1] > 3 + 4 + 0.55, `lx=${lx.toFixed(2)}`);
 }
 
 // 같은 플레이어 즉시 재투척 → 쿨타임
@@ -88,7 +88,7 @@ check("방 쿨타임 경과 후 다른 유저 허용", items(display).length ===
 
 // 발판이 아닌 곳 / 잘못된 발판 번호 → 무시
 await sleep(2000);
-send(bob, { type: "move", p: [-22, ZONE_Y, -23], r: 0 }); // 관전석 한가운데(발판 아님)
+send(bob, { type: "move", p: [-7, ZONE_Y, 22], r: 0 }); // 관전석 뒤쪽(버튼 아님)
 await sleep(150);
 send(bob, { type: "throw_item", pad: 1 });
 send(bob, { type: "throw_item", pad: 7 });

@@ -2,17 +2,18 @@ import { useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Html } from "@react-three/drei";
 import { CuboidCollider, RigidBody } from "@react-three/rapier";
-import type { MeshStandardMaterial } from "three";
+import type { Group, MeshStandardMaterial } from "three";
 import { SPECTATOR_ZONES, THROW_PADS, THROW_PAD_SIZE, type SpectatorZoneDef } from "@quiz/shared";
 import { useGameStore } from "../store/useGameStore";
+import { audio } from "../audio/AudioManager";
 
 const FLOOR_T = 0.6;
 const WALL_T = 0.3;
 const PAD_COLOR = "#ff3d9a";
 
 /**
- * 탈락자 관전석 — 보드 뒤쪽 좌·우 대각선 위에 하나씩 (type="fixed").
- * 탈락자는 둘 중 무작위 관전석으로 리스폰된다 (LocalPlayer).
+ * 탈락자 관전석 — 보드 정면 앞쪽(+z)에 가로로 길게 뻗은 그랜드스탠드 (type="fixed").
+ * 위치/크기/버튼 배치는 서버와 공유 (@quiz/shared 의 SPECTATOR_ZONES / THROW_PADS).
  */
 export function SpectatorZones() {
   return (
@@ -82,31 +83,68 @@ function SpectatorBox({ zone, index }: { zone: SpectatorZoneDef; index: number }
         <Launcher key={p.index} position={[depth / 2, wh + 0.1, p.local[1]]} />
       ))}
 
-      <Html position={[-depth / 4, wh + 0.8, 0]} center zIndexRange={[10, 0]}>
-        <div className="zone-label">관전석 · 분홍 발판을 밟으면 방해물 발사!</div>
+      <Html position={[-depth / 2, wh + 0.8, 0]} center zIndexRange={[10, 0]}>
+        <div className="zone-label">관전석 · 분홍 버튼을 밟으면 방해물 발사!</div>
       </Html>
     </RigidBody>
   );
 }
 
+const BUTTON = {
+  baseR: 1.05,
+  baseH: 0.16,
+  capR: 0.72,
+  capH: 0.26,
+  /** 눌렸을 때 버튼이 내려가는 깊이 */
+  travel: 0.2,
+};
+
 /**
- * 투척 발판 — 바닥에 깔린 형광 발판 + sensor 충돌체.
- * 내 캐릭터(LocalPlayer, userData.localPlayer)가 들어오는 순간 throw_item 요청.
- * (원격 플레이어는 탈락 시 센서라 센서-센서 간에는 이벤트가 발생하지 않음)
- * 내 쿨타임 동안은 회색으로 어두워지고, 준비되면 다시 반짝인다.
+ * 투척 버튼 — 둥근 받침대 위에 튀어나온 입체 버튼 + sensor 충돌체.
+ *  - 내 캐릭터(LocalPlayer, userData.localPlayer)가 들어오는 순간 throw_item 요청 + "딸깍" 소리
+ *  - 눌림 애니메이션은 내 캐릭터뿐 아니라 버튼 위에 선 모든 탈락자 위치로 판단 → 송출 화면에서도 보임
+ *  - 내 쿨타임 동안은 버튼이 회색으로, 준비되면 분홍색으로 반짝임
+ * (버튼은 시각 요소라 콜라이더가 없어 걸려 넘어지지 않음)
  */
 function ThrowPad({ index, local }: { index: number; local: [number, number] }) {
-  const mat = useRef<MeshStandardMaterial>(null);
+  const capMat = useRef<MeshStandardMaterial>(null);
+  const cap = useRef<Group>(null);
+  const localOn = useRef(false);
+  const press = useRef({ y: 0, wasDown: false });
   const half = THROW_PAD_SIZE / 2;
+  const pad = THROW_PADS[index];
+  const floorY = SPECTATOR_ZONES[pad.zone].center[1];
 
-  useFrame((state) => {
-    const m = mat.current;
-    if (!m) return;
+  useFrame((state, delta) => {
     const { throwReadyAt, selfId, players } = useGameStore.getState();
-    const me = selfId ? players[selfId] : undefined;
-    const coolingDown = !!me && !me.alive && Date.now() < throwReadyAt;
-    m.color.set(coolingDown ? "#6b6480" : PAD_COLOR);
-    m.emissiveIntensity = coolingDown ? 0 : 0.45 + 0.35 * Math.sin(state.clock.elapsedTime * 5 + index);
+
+    // 버튼 위에 탈락자가 서 있는지 (내 센서 상태 + 모든 플레이어 위치)
+    let down = localOn.current;
+    if (!down) {
+      for (const id in players) {
+        const p = players[id];
+        if (p.alive) continue;
+        if (Math.abs(p.p[0] - pad.x) < BUTTON.baseR && Math.abs(p.p[2] - pad.z) < BUTTON.baseR && p.p[1] > floorY && p.p[1] < floorY + 2) {
+          down = true;
+          break;
+        }
+      }
+    }
+
+    // "딸깍": 눌릴 땐 아주 빠르게, 올라올 땐 조금 천천히
+    const target = down ? -BUTTON.travel : 0;
+    press.current.y += (target - press.current.y) * (1 - Math.exp(-Math.min(delta, 0.1) * (down ? 40 : 14)));
+    if (cap.current) cap.current.position.y = BUTTON.baseH + BUTTON.capH / 2 + press.current.y;
+    press.current.wasDown = down;
+
+    const m = capMat.current;
+    if (m) {
+      const me = selfId ? players[selfId] : undefined;
+      const coolingDown = !!me && !me.alive && Date.now() < throwReadyAt;
+      m.color.set(coolingDown ? "#6b6480" : PAD_COLOR);
+      m.emissive.set(coolingDown ? "#000000" : PAD_COLOR);
+      m.emissiveIntensity = coolingDown ? 0 : down ? 0.9 : 0.35 + 0.3 * Math.sin(state.clock.elapsedTime * 5 + index);
+    }
   });
 
   return (
@@ -117,23 +155,37 @@ function ThrowPad({ index, local }: { index: number; local: [number, number] }) 
         position={[0, 0.6, 0]}
         onIntersectionEnter={({ other }) => {
           if (!(other.rigidBodyObject?.userData as { localPlayer?: boolean } | undefined)?.localPlayer) return;
+          localOn.current = true;
+          audio.playSfx("tick", { rate: 0.6, volume: 0.8 }); // 딸깍
           const t = other.rigidBody?.translation();
           useGameStore.getState().throwItem(index, t ? [t.x, t.y, t.z] : undefined);
         }}
+        onIntersectionExit={({ other }) => {
+          if ((other.rigidBodyObject?.userData as { localPlayer?: boolean } | undefined)?.localPlayer) localOn.current = false;
+        }}
       />
-      <mesh position={[0, 0.03, 0]} rotation-x={-Math.PI / 2} receiveShadow>
-        <planeGeometry args={[THROW_PAD_SIZE, THROW_PAD_SIZE]} />
-        <meshStandardMaterial ref={mat} color={PAD_COLOR} emissive={PAD_COLOR} emissiveIntensity={0.5} />
+      {/* 받침대 */}
+      <mesh position={[0, BUTTON.baseH / 2, 0]} receiveShadow castShadow>
+        <cylinderGeometry args={[BUTTON.baseR * 0.95, BUTTON.baseR, BUTTON.baseH, 32]} />
+        <meshStandardMaterial color="#2a2440" metalness={0.3} roughness={0.5} />
       </mesh>
-      {/* 보드 방향(로컬 +x) 화살표 */}
-      <mesh position={[0.15, 0.05, 0]} rotation-x={-Math.PI / 2} rotation-z={-Math.PI / 2}>
-        <circleGeometry args={[0.7, 3]} />
-        <meshStandardMaterial color="#ffffff" />
+      {/* 받침대 테두리 빛 */}
+      <mesh position={[0, BUTTON.baseH + 0.005, 0]} rotation-x={-Math.PI / 2}>
+        <ringGeometry args={[BUTTON.capR + 0.06, BUTTON.baseR * 0.93, 32]} />
+        <meshBasicMaterial color={PAD_COLOR} toneMapped={false} transparent opacity={0.85} />
       </mesh>
-      <mesh position={[-0.55, 0.05, 0]} rotation-x={-Math.PI / 2}>
-        <planeGeometry args={[0.8, 0.35]} />
-        <meshStandardMaterial color="#ffffff" />
-      </mesh>
+      {/* 눌리는 버튼 */}
+      <group ref={cap} position={[0, BUTTON.baseH + BUTTON.capH / 2, 0]}>
+        <mesh castShadow>
+          <cylinderGeometry args={[BUTTON.capR * 0.92, BUTTON.capR, BUTTON.capH, 32]} />
+          <meshStandardMaterial ref={capMat} color={PAD_COLOR} emissive={PAD_COLOR} emissiveIntensity={0.4} roughness={0.3} />
+        </mesh>
+        {/* 윗면 하이라이트 */}
+        <mesh position={[0, BUTTON.capH / 2 + 0.003, 0]} rotation-x={-Math.PI / 2}>
+          <circleGeometry args={[BUTTON.capR * 0.55, 24]} />
+          <meshBasicMaterial color="#ffffff" transparent opacity={0.35} />
+        </mesh>
+      </group>
     </group>
   );
 }

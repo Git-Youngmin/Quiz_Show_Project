@@ -80,6 +80,11 @@ interface StoreState {
   game: GameState;
   /** round_reset 마다 증가 → 내 캐릭터를 새 스폰 위치에 재생성하는 key 로 사용 */
   spawnVersion: number;
+  /**
+   * 이번 게임에서 내가 실제로 탈락했는지 (큰 "탈락" 연출용).
+   * 진행 중에 관전으로 입장한 경우는 false — 탈락이 아니라 "관전 입장" 안내만 보여준다.
+   */
+  selfEliminated: boolean;
 
   // ── 탈락자 방해물 ──
   obstacles: ActiveObstacle[];
@@ -174,6 +179,7 @@ export const useGameStore = create<StoreState>()((set, get) => {
           players,
           playerIds: Object.keys(players),
           game: msg.game,
+          selfEliminated: false, // 새로 접속 — 관전으로 들어왔어도 "탈락"은 아님
           clockOffset: msg.serverTime - Date.now(), // pong 수신 시 지연 보정값으로 갱신
           lastError: null,
         });
@@ -187,7 +193,8 @@ export const useGameStore = create<StoreState>()((set, get) => {
       case "players_eliminated": {
         const next = { ...get().players };
         for (const id of msg.ids) if (next[id]) next[id] = { ...next[id], alive: false };
-        set({ players: next });
+        const selfId = get().selfId;
+        set({ players: next, ...(selfId && msg.ids.includes(selfId) ? { selfEliminated: true } : {}) });
         break;
       }
 
@@ -199,6 +206,7 @@ export const useGameStore = create<StoreState>()((set, get) => {
           players,
           playerIds: Object.keys(players),
           spawnVersion: get().spawnVersion + 1,
+          selfEliminated: false, // 전원 부활
         });
         break;
       }
@@ -354,6 +362,7 @@ export const useGameStore = create<StoreState>()((set, get) => {
     players: {},
     game: INITIAL_GAME_STATE,
     spawnVersion: 0,
+    selfEliminated: false,
     obstacles: [],
     throwReadyAt: 0,
 
@@ -429,7 +438,7 @@ export const useGameStore = create<StoreState>()((set, get) => {
       const me = selfId ? players[selfId] : undefined;
       if (!me?.alive) return; // 중복 보고 방지
       // 낙관적 업데이트: 서버 확인 전에 바로 조작 차단
-      set({ players: { ...players, [me.id]: { ...me, alive: false } } });
+      set({ players: { ...players, [me.id]: { ...me, alive: false } }, selfEliminated: true });
       rawSend({ type: "fell" });
     },
 

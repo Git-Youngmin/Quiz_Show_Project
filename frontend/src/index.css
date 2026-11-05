@@ -386,3 +386,13 @@ td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid #3b3755; }
 }
 .room-full h1 { margin: 0; font-size: clamp(28px, 7vw, 40px); }
 .quiz-item.done { opacity: .55; }
+
+/* 진행 중 입장 → 관전 안내 (탈락 연출 대신, 잠시 보였다가 사라짐) */
+.join-spectator-note {
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 15;
+  display: grid; gap: 6px; text-align: center; pointer-events: none;
+  background: rgba(20, 18, 31, .8); border-radius: 14px; padding: 16px 20px; width: min(420px, calc(100% - 32px));
+  animation: fade-out .6s ease-in 3.5s forwards;
+}
+.join-spectator-note b { font-size: 18px; }
+.join-spectator-note span { opacity: .8; font-size: 14px; }

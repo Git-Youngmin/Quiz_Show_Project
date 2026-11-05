@@ -130,7 +130,7 @@ function planShot(
       }
       // 우승자 없음 → 대기와 같은 와이드 오비트
       const a = t * 0.08;
-      shot.pos.set(Math.sin(a) * 34, 22, Math.cos(a) * 34);
+      shot.pos.set(Math.sin(a) * 28, 19, Math.cos(a) * 28);
       shot.look.set(0, 0, 0);
       shot.fov = 45;
       shot.speed = 1.2;
@@ -148,7 +148,7 @@ function planShot(
     }
     case "waiting": {
       const a = t * 0.08;
-      shot.pos.set(Math.sin(a) * 34, 22, Math.cos(a) * 34);
+      shot.pos.set(Math.sin(a) * 28, 19, Math.cos(a) * 28);
       shot.look.set(0, 0, 0);
       shot.fov = 45;
       shot.speed = 1.2;
@@ -157,14 +157,14 @@ function planShot(
     case "countdown": {
       // 3초 동안 위에서 앞으로 푸시 인
       const k = Math.min(pt / 3, 1);
-      shot.pos.set(0, 34 - k * 10, 30 - k * 4);
+      shot.pos.set(0, 28 - k * 8, 26 - k * 3);
       shot.look.set(0, 0, 0);
       shot.fov = 45 - k * 5;
       shot.speed = 2;
       break;
     }
     case "question_active": {
-      shot.pos.set(Math.sin(t * 0.25) * 12, 18, 26);
+      shot.pos.set(Math.sin(t * 0.25) * 9, 16, 22);
       shot.look.set(0, 0, 0);
       shot.fov = 42;
       shot.speed = 1.5;
@@ -187,7 +187,7 @@ function planShot(
       if (pt < 1.8 || survivors === 0) {
         // ① 꺼지는 구역(들)을 앞쪽 위에서 내려다보며 추락 추적
         const fall = Math.min(pt, 1.8) * 4; // 타일이 떨어지는 만큼 시선도 아래로
-        shot.pos.set(zoneX * 0.2, 16, 22);
+        shot.pos.set(zoneX * 0.2, 14, 19);
         shot.look.set(zoneX, -fall, zoneZ);
         shot.fov = 40;
         shot.shake = pt < 0.6 ? 0.12 : 0.04; // 꺼지는 순간 강한 흔들림

@@ -81,7 +81,16 @@ const createRoom = (roomId) => fetch(`${HTTP}/api/rooms`, { method: "POST", head
   await sleep(3000 + 3000 + 3000 + 4500 + 300);
   const end = lastGame(display);
   check("문제 소진 + 여러 명 생존 → game_over (공동 생존)", end.phase === "game_over" && end.winnerId === null && end.lastEliminatedCount === 1, `phase=${end.phase}`);
-  for (const x of [admin, display, a, b, c]) x.ws.close();
+  // 입장 시 생존 여부: 게임 종료 화면에서 들어오면 바로 참가, 문제 진행 중 들어오면 관전
+  const lateOver = await connect(ROOM, { role: "player", name: "AfterGame" });
+  const meOver = lateOver.log.find((m) => m.type === "welcome").players.find((p) => p.id === lateOver.id);
+  check("game_over 중 입장 → 관전이 아니라 생존 상태로 입장", meOver.alive === true);
+  send(admin, { type: "admin_start_game", quizzes: [quizzes[0]] });
+  await sleep(500);
+  const lateMid = await connect(ROOM, { role: "player", name: "MidGame" });
+  const meMid = lateMid.log.find((m) => m.type === "welcome").players.find((p) => p.id === lateMid.id);
+  check("문제 진행 중 입장 → 관전으로 입장", meMid.alive === false);
+  for (const x of [admin, display, a, b, c, lateOver, lateMid]) x.ws.close();
 }
 
 // ───────────── 2. 정원 100명 ─────────────

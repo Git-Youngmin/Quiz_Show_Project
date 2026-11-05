@@ -13,6 +13,7 @@ export function QuizBanner({ showSelfStatus = false }: { showSelfStatus?: boolea
   const aliveCount = useGameStore((s) => Object.values(s.players).filter((p) => p.alive).length);
   const selfAlive = useSelfAlive();
   const selfId = useGameStore((s) => s.selfId);
+  const selfEliminated = useGameStore((s) => s.selfEliminated);
   const winnerName = useGameStore((s) => (s.game.winnerId ? s.players[s.game.winnerId]?.name ?? "???" : null));
   const remaining = useCountdown();
   const sec = remaining === null ? null : Math.ceil(remaining / 1000);
@@ -132,14 +133,23 @@ export function QuizBanner({ showSelfStatus = false }: { showSelfStatus?: boolea
   return (
     <>
       <div className="quiz-banner">{content}</div>
-      {showSelfStatus && role === "player" && !selfAlive && (
+      {/* 접속 확인(selfId) 전에는 아무것도 띄우지 않음 — 입장 직후 "탈락"이 깜빡이지 않도록 */}
+      {showSelfStatus && role === "player" && selfId && !selfAlive && (
         <>
-          {/* 큰 "탈락" 문구는 잠시 보였다가 사라지고, 작은 관전 배지만 남음 */}
-          <div className="eliminated-overlay">
-            <div className="eliminated-title">탈락</div>
-            <div>관전석으로 이동합니다</div>
-          </div>
-          <div className="spectator-pill">관전 중 · 앞쪽 분홍 발판을 밟으면 방해물을 던져요!</div>
+          {selfEliminated ? (
+            // 이번 게임에서 실제로 탈락: 큰 "탈락" 문구는 잠시 보였다가 사라짐
+            <div className="eliminated-overlay">
+              <div className="eliminated-title">탈락</div>
+              <div>관전석으로 이동합니다</div>
+            </div>
+          ) : (
+            // 문제 진행 중에 들어온 경우: 탈락이 아니라 관전 입장 안내
+            <div className="join-spectator-note">
+              <b>게임이 진행 중이라 관전석으로 입장했어요</b>
+              <span>다음 게임부터 함께 참가할 수 있어요</span>
+            </div>
+          )}
+          <div className="spectator-pill">관전 중 · 앞쪽 분홍 버튼을 밟으면 방해물을 던져요!</div>
         </>
       )}
     </>

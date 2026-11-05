@@ -1,8 +1,8 @@
 /** 3D 월드 공용 상수 */
 import { GRAVITY, SPECTATOR_ZONES, zoneToWorld } from "@quiz/shared";
 
-/** 퀴즈 보드(바닥) 크기 — 윗면이 y = 0 */
-export const BOARD_SIZE = 30;
+/** 퀴즈 보드(바닥) 크기 — 윗면이 y = 0 (서버와 공유하는 값) */
+export { BOARD_SIZE } from "@quiz/shared";
 export const BOARD_THICKNESS = 1;
 
 /**
@@ -19,8 +19,8 @@ export const MOVE_SPEED = 7; // units/s
 /** 땅/공중에서 목표 속도에 다가가는 빠르기 (클수록 즉각 반응) */
 export const GROUND_ACCEL = 22;
 export const AIR_ACCEL = 9;
-/** 점프 속도 — 최고 높이 ≈ v² / 2g = 10.5² / 60 ≈ 1.8 */
-export const JUMP_VELOCITY = 10.5;
+/** 점프 속도 — 최고 높이 ≈ v² / 2g = 12² / 60 ≈ 2.4 (이전 10.5 → 1.8) */
+export const JUMP_VELOCITY = 12;
 /** 내려올 때 추가 중력 (총 30 + 22) → 올라갈 땐 가볍게, 떨어질 땐 툭 */
 export const FALL_EXTRA_GRAVITY = 22;
 /** 이 높이 아래로 떨어지면 리스폰 */
@@ -37,7 +37,7 @@ export function randomSpectatorSpawn(): { zone: number; pos: { x: number; y: num
   const zone = Math.floor(Math.random() * SPECTATOR_ZONES.length);
   const def = SPECTATOR_ZONES[zone];
   const [depth, width] = def.size;
-  const lx = -depth / 2 + 1.5 + Math.random() * (depth - 6); // 뒤쪽 벽 ~ 발판 줄 앞까지
+  const lx = -depth / 2 + 1.2 + Math.random() * Math.max(0.5, depth - 5.5); // 뒤쪽 벽 ~ 버튼 줄 앞까지
   const lz = (Math.random() - 0.5) * (width - 3);
   const [x, z] = zoneToWorld(def, lx, lz);
   return { zone, pos: { x, y: def.center[1] + CHARACTER_CENTER_Y + 0.3, z } };
