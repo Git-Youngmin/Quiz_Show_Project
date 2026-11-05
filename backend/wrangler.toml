@@ -1,0 +1,20 @@
+name = "quiz-show-backend"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+# 프론트엔드(Vite dev 서버 등) 허용 Origin. 쉼표로 구분, "*" 는 전체 허용.
+[vars]
+ALLOWED_ORIGINS = "*"
+
+# 방(Room) 하나당 Durable Object 인스턴스 하나
+[[durable_objects.bindings]]
+name = "GAME_ROOM"
+class_name = "GameRoom"
+
+# SQLite 기반 Durable Object (무료 플랜에서도 사용 가능)
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["GameRoom"]
+
+[observability]
+enabled = true

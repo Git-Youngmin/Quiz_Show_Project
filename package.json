@@ -1,0 +1,13 @@
+{
+  "name": "quiz-show-project",
+  "private": true,
+  "workspaces": [
+    "shared",
+    "backend"
+  ],
+  "scripts": {
+    "dev:backend": "npm run dev -w backend",
+    "typecheck": "npm run typecheck -w backend",
+    "test:ws": "npm run test:ws -w backend"
+  }
+}
