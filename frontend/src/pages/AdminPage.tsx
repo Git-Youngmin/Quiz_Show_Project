@@ -1,13 +1,25 @@
 import { useState, type FormEvent } from "react";
-import { MAX_QUESTION_LENGTH, TIME_LIMIT_SEC, type Answer } from "@quiz/shared";
+import {
+  MAX_CHOICE_LENGTH,
+  MAX_QUESTION_LENGTH,
+  TIME_LIMIT_SEC,
+  type Choice,
+  type Choices,
+  type OXAnswer,
+  type QuizType,
+} from "@quiz/shared";
 import { ConnectionStatus } from "../components/ConnectionStatus";
 import { PlayerTable } from "../components/PlayerTable";
+import { ChoiceGrid } from "../components/QuizBanner";
 import { useRoomConnection } from "../lib/useRoomConnection";
 import { useCountdown } from "../lib/useCountdown";
 import { PHASE_LABEL } from "../lib/phase";
 import { useGameStore } from "../store/useGameStore";
 
-/** 방장 패널 — 문제 출제 / 진행 상황 / 라운드 리셋 */
+const CHOICE_LETTERS: Choice[] = ["A", "B", "C", "D"];
+const CHOICE_POS: Record<Choice, string> = { A: "좌상", B: "우상", C: "좌하", D: "우하" };
+
+/** 방장 패널 — 문제 출제(O/X · 4지선다) / 진행 상황 / 라운드 리셋 */
 export default function AdminPage() {
   const { roomId } = useRoomConnection("admin");
   const status = useGameStore((s) => s.status);
@@ -16,19 +28,30 @@ export default function AdminPage() {
   const remaining = useCountdown();
   const winnerName = useGameStore((s) => (s.game.winnerId ? s.players[s.game.winnerId]?.name ?? "(퇴장함)" : null));
 
+  const [quizType, setQuizType] = useState<QuizType>("OX");
   const [question, setQuestion] = useState("");
-  const [answer, setAnswer] = useState<Answer>("O");
+  const [oxAnswer, setOxAnswer] = useState<OXAnswer>("O");
+  const [choices, setChoices] = useState<Choices>(["", "", "", ""]);
+  const [choiceAnswer, setChoiceAnswer] = useState<Choice>("A");
   const [timeLimit, setTimeLimit] = useState<number>(TIME_LIMIT_SEC.default);
 
   const list = Object.values(players);
   const aliveCount = list.filter((p) => p.alive).length;
-  const canStart = status === "open" && game.phase === "waiting" && question.trim().length > 0;
+  const formValid =
+    question.trim().length > 0 && (quizType === "OX" || choices.every((c) => c.trim().length > 0));
+  const canStart = status === "open" && game.phase === "waiting" && formValid;
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (!canStart) return;
-    useGameStore.getState().startQuestion(question.trim(), answer, timeLimit);
+    const base = { question: question.trim(), timeLimitSec: timeLimit };
+    useGameStore.getState().startQuestion(
+      quizType === "OX"
+        ? { quizType: "OX", answer: oxAnswer, ...base }
+        : { quizType: "MULTIPLE", answer: choiceAnswer, choices: choices.map((c) => c.trim()) as Choices, ...base },
+    );
     setQuestion("");
+    setChoices(["", "", "", ""]);
   };
 
   return (
@@ -42,6 +65,7 @@ export default function AdminPage() {
           <div className="row">
             <span className={`badge phase-${game.phase}`}>{PHASE_LABEL[game.phase]}</span>
             <span>문제 {game.round}</span>
+            <span className="badge">{game.quizType === "OX" ? "O/X" : "4지선다"}</span>
             {remaining !== null && <b className="mono">{(remaining / 1000).toFixed(1)}s</b>}
           </div>
           <span>생존 {aliveCount} / {list.length}명</span>
@@ -52,37 +76,92 @@ export default function AdminPage() {
           </p>
         )}
         {game.question && game.phase !== "game_over" && (
-          <p style={{ marginBottom: 0 }}>
-            Q. {game.question}
-            {game.answer && <b> → 정답 {game.answer}</b>}
-          </p>
+          <>
+            <p style={{ marginBottom: 8 }}>
+              Q. {game.question}
+              {game.answer && <b> → 정답 {game.answer}</b>}
+            </p>
+            {game.choices && <ChoiceGrid choices={game.choices} answer={game.answer} />}
+          </>
         )}
       </div>
 
       {/* ── 출제 폼 ── */}
       <form className="card" onSubmit={submit}>
-        <h3 style={{ marginTop: 0 }}>O / X 문제 출제</h3>
+        <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
+          <h3 style={{ margin: 0 }}>문제 출제</h3>
+          <div className="segmented" role="tablist">
+            {(["OX", "MULTIPLE"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                role="tab"
+                aria-selected={quizType === t}
+                className={quizType === t ? "selected" : ""}
+                onClick={() => setQuizType(t)}
+              >
+                {t === "OX" ? "O / X" : "4지선다"}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <textarea
           className="input"
           style={{ width: "100%", minHeight: 72, resize: "vertical" }}
-          placeholder="예) 바나나는 나무에서 자란다?"
+          placeholder={quizType === "OX" ? "예) 바나나는 나무에서 자란다?" : "예) 태양계에서 가장 큰 행성은?"}
           value={question}
           maxLength={MAX_QUESTION_LENGTH}
           onChange={(e) => setQuestion(e.target.value)}
         />
+
+        {quizType === "OX" ? (
+          <div className="row" style={{ marginTop: 12 }}>
+            <span>정답</span>
+            {(["O", "X"] as const).map((a) => (
+              <button
+                key={a}
+                type="button"
+                className={`answer-toggle ${a} ${oxAnswer === a ? "selected" : ""}`}
+                onClick={() => setOxAnswer(a)}
+              >
+                {a}
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="choice-inputs">
+            <small>보기를 입력하고 정답 버튼을 눌러 선택하세요. 보드 구역: A 좌상 · B 우상 · C 좌하 · D 우하</small>
+            {CHOICE_LETTERS.map((letter, i) => (
+              <div key={letter} className={`choice-input-row ${choiceAnswer === letter ? "is-answer" : ""}`}>
+                <button
+                  type="button"
+                  className={`choice-letter zone-${letter}`}
+                  aria-pressed={choiceAnswer === letter}
+                  title={`${letter}를 정답으로`}
+                  onClick={() => setChoiceAnswer(letter)}
+                >
+                  {letter}
+                </button>
+                <input
+                  className="input"
+                  placeholder={`보기 ${letter} (${CHOICE_POS[letter]})`}
+                  value={choices[i]}
+                  maxLength={MAX_CHOICE_LENGTH}
+                  onChange={(e) => {
+                    const next = [...choices] as Choices;
+                    next[i] = e.target.value;
+                    setChoices(next);
+                  }}
+                />
+                {choiceAnswer === letter && <span className="answer-tag">정답</span>}
+              </div>
+            ))}
+          </div>
+        )}
+
         <div className="row" style={{ marginTop: 12 }}>
-          <span>정답</span>
-          {(["O", "X"] as const).map((a) => (
-            <button
-              key={a}
-              type="button"
-              className={`answer-toggle ${a} ${answer === a ? "selected" : ""}`}
-              onClick={() => setAnswer(a)}
-            >
-              {a}
-            </button>
-          ))}
-          <label className="row" style={{ marginLeft: 8 }}>
+          <label className="row">
             제한 시간
             <input
               className="input"
@@ -120,7 +199,7 @@ export default function AdminPage() {
         <h3 style={{ marginTop: 0 }}>참가자</h3>
         <PlayerTable />
         <p className="mono" style={{ opacity: 0.7 }}>
-          참가 링크: {location.origin}/play?room={roomId}
+          참가 링크: {location.origin}/?room={roomId}
         </p>
       </div>
     </div>

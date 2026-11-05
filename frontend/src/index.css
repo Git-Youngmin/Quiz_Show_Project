@@ -191,3 +191,52 @@ td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid #3b3755; }
 .avatar-sphere .avatar-eyes { top: 40%; }
 .avatar-cone .avatar-eyes { top: 52%; gap: 4%; }
 .avatar-cone .avatar-eyes span { width: 10%; }
+
+/* ───── Phase 6: 4지선다 ───── */
+.zone-A { --zone: #ff5c6c; }
+.zone-B { --zone: #4d8bff; }
+.zone-C { --zone: #f5a524; }
+.zone-D { --zone: #3fbf6f; }
+.answer-A { color: #ff8a95; }
+.answer-B { color: #7fb0ff; }
+.answer-C { color: #ffc35c; }
+.answer-D { color: #6fe39a; }
+
+.choice-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 8px 0 4px; text-align: left; }
+.choice-chip {
+  display: flex; align-items: center; gap: 8px; min-width: 0;
+  background: color-mix(in srgb, var(--zone) 30%, rgba(20, 18, 31, .6));
+  border-left: 4px solid var(--zone); border-radius: 8px; padding: 6px 8px; font-size: 15px;
+}
+.choice-chip b {
+  flex: none; width: 24px; height: 24px; border-radius: 6px; display: grid; place-items: center;
+  background: var(--zone); color: #fff; font-size: 14px;
+}
+.choice-chip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.choice-chip.dim { opacity: .35; }
+
+.choice-floor-label {
+  display: flex; align-items: center; gap: 6px; pointer-events: none; user-select: none; white-space: nowrap;
+  background: rgba(20, 18, 31, .7); border: 2px solid var(--zone); border-radius: 999px; padding: 2px 10px 2px 3px;
+  font-size: 13px; color: #fff;
+}
+.choice-floor-label b {
+  width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--zone);
+}
+.choice-floor-label:not(:has(span)) { padding-right: 3px; }
+
+.segmented { display: inline-flex; background: #14121f; border-radius: 10px; padding: 3px; }
+.segmented button {
+  border: 0; background: transparent; color: inherit; padding: 6px 14px; border-radius: 8px; cursor: pointer;
+}
+.segmented button.selected { background: #6c5cff; }
+.choice-inputs { display: grid; gap: 8px; margin-top: 12px; }
+.choice-inputs small { opacity: .7; }
+.choice-input-row { display: grid; grid-template-columns: 40px 1fr 44px; gap: 8px; align-items: center; }
+.choice-input-row .input { width: 100%; }
+.choice-letter {
+  width: 40px; height: 40px; border-radius: 8px; border: 2px solid var(--zone); cursor: pointer;
+  background: transparent; color: #fff; font-weight: 800; font-size: 16px;
+}
+.choice-input-row.is-answer .choice-letter { background: var(--zone); }
+.answer-tag { font-size: 12px; background: #1f7a4d; padding: 2px 8px; border-radius: 999px; }

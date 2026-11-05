@@ -13,16 +13,21 @@ const HIDDEN_Y = -(HEIGHT + 1.3);
 const LASER_COUNT = 5;
 
 /**
- * O/X 구역 사이 차단벽 (레이저 펜스 + 유리벽) — kinematicPosition 강체.
+ * 구역 사이 차단벽 (레이저 펜스 + 유리벽) — kinematicPosition 강체 1개.
+ *  - OX       : x = 0 을 따라 한 줄
+ *  - MULTIPLE : x = 0, z = 0 을 가로지르는 십자(➕) — 같은 강체에 벽 2개를 붙여 함께 오르내림
  * 서버가 내려준 barrierRaisesAt(서버 시각)이 지나면 바닥 아래에서 솟아오르고,
  * waiting / game_over 가 되면 다시 내려간다. 모든 기기가 서버 시계 기준으로 동시에 움직인다.
  */
 export function Barrier() {
   const body = useRef<RapierRigidBody>(null);
   const group = useRef<Group>(null);
-  const glass = useRef<MeshStandardMaterial>(null);
   const lasers = useRef<(MeshBasicMaterial | null)[]>([]);
+  const glassMats = useRef<(MeshStandardMaterial | null)[]>([]);
   const y = useRef(HIDDEN_Y);
+  const quizType = useGameStore((s) => s.game.quizType);
+  // 회전 0 = z 축을 따라 뻗은 벽(x=0), 90° = x 축을 따라 뻗은 벽(z=0)
+  const walls = quizType === "MULTIPLE" ? [0, Math.PI / 2] : [0];
 
   useFrame((state, delta) => {
     const rb = body.current;
@@ -42,55 +47,59 @@ export function Barrier() {
     // 레이저가 위로 흐르듯 깜빡임
     const t = state.clock.elapsedTime;
     lasers.current.forEach((m, i) => {
-      if (m) m.opacity = 0.55 + 0.45 * Math.sin(t * 8 - i * 0.9);
+      if (m) m.opacity = 0.55 + 0.45 * Math.sin(t * 8 - (i % LASER_COUNT) * 0.9);
     });
-    if (glass.current) glass.current.emissiveIntensity = 0.35 + 0.15 * Math.sin(t * 3);
+    for (const m of glassMats.current) if (m) m.emissiveIntensity = 0.35 + 0.15 * Math.sin(t * 3);
   });
 
   return (
     <RigidBody ref={body} type="kinematicPosition" colliders={false} position={[0, HIDDEN_Y, 0]}>
-      {/* friction 0: 벽 위에 올라타거나 달라붙지 않도록 */}
-      <CuboidCollider args={[THICKNESS / 2, HEIGHT / 2, BOARD_SIZE / 2]} position={[0, HEIGHT / 2, 0]} friction={0} />
-
       <group ref={group} visible={false}>
-        {/* 유리벽 */}
-        <mesh position={[0, HEIGHT / 2, 0]}>
-          <boxGeometry args={[THICKNESS, HEIGHT, BOARD_SIZE]} />
-          <meshStandardMaterial
-            ref={glass}
-            color="#9ff3ff"
-            emissive="#3fd8ff"
-            transparent
-            opacity={0.22}
-            depthWrite={false}
-          />
-        </mesh>
-        {/* 레이저 라인 */}
-        {Array.from({ length: LASER_COUNT }, (_, i) => (
-          <mesh key={i} position={[0, ((i + 0.5) / LASER_COUNT) * HEIGHT, 0]}>
-            <boxGeometry args={[THICKNESS * 1.6, 0.05, BOARD_SIZE]} />
-            <meshBasicMaterial
-              ref={(m) => {
-                lasers.current[i] = m;
-              }}
-              color="#7df9ff"
-              transparent
-              toneMapped={false}
+        {walls.map((rot, w) => (
+          <group key={`${quizType}-${w}`} rotation-y={rot}>
+            {/* friction 0: 벽 위에 올라타거나 달라붙지 않도록 */}
+            <CuboidCollider args={[THICKNESS / 2, HEIGHT / 2, BOARD_SIZE / 2]} position={[0, HEIGHT / 2, 0]} friction={0} />
+            <WallVisual
+              glassRef={(m) => (glassMats.current[w] = m)}
+              laserRef={(i, m) => (lasers.current[w * LASER_COUNT + i] = m)}
             />
-          </mesh>
-        ))}
-        {/* 상단 레일 + 양 끝 기둥 */}
-        <mesh position={[0, HEIGHT, 0]}>
-          <boxGeometry args={[0.22, 0.14, BOARD_SIZE + 0.2]} />
-          <meshStandardMaterial color="#d8faff" metalness={0.6} roughness={0.3} />
-        </mesh>
-        {[-1, 1].map((s) => (
-          <mesh key={s} position={[0, HEIGHT / 2, (s * BOARD_SIZE) / 2]}>
-            <boxGeometry args={[0.3, HEIGHT, 0.3]} />
-            <meshStandardMaterial color="#d8faff" metalness={0.6} roughness={0.3} />
-          </mesh>
+          </group>
         ))}
       </group>
     </RigidBody>
+  );
+}
+
+/** 벽 하나의 외형: 유리 + 레이저 라인 + 상단 레일 + 양 끝 기둥 (z 축 방향으로 뻗음) */
+function WallVisual({
+  glassRef,
+  laserRef,
+}: {
+  glassRef: (m: MeshStandardMaterial | null) => void;
+  laserRef: (i: number, m: MeshBasicMaterial | null) => void;
+}) {
+  return (
+    <>
+      <mesh position={[0, HEIGHT / 2, 0]}>
+        <boxGeometry args={[THICKNESS, HEIGHT, BOARD_SIZE]} />
+        <meshStandardMaterial ref={glassRef} color="#9ff3ff" emissive="#3fd8ff" transparent opacity={0.22} depthWrite={false} />
+      </mesh>
+      {Array.from({ length: LASER_COUNT }, (_, i) => (
+        <mesh key={i} position={[0, ((i + 0.5) / LASER_COUNT) * HEIGHT, 0]}>
+          <boxGeometry args={[THICKNESS * 1.6, 0.05, BOARD_SIZE]} />
+          <meshBasicMaterial ref={(m) => laserRef(i, m)} color="#7df9ff" transparent toneMapped={false} />
+        </mesh>
+      ))}
+      <mesh position={[0, HEIGHT, 0]}>
+        <boxGeometry args={[0.22, 0.14, BOARD_SIZE + 0.2]} />
+        <meshStandardMaterial color="#d8faff" metalness={0.6} roughness={0.3} />
+      </mesh>
+      {[-1, 1].map((s) => (
+        <mesh key={s} position={[0, HEIGHT / 2, (s * BOARD_SIZE) / 2]}>
+          <boxGeometry args={[0.3, HEIGHT, 0.3]} />
+          <meshStandardMaterial color="#d8faff" metalness={0.6} roughness={0.3} />
+        </mesh>
+      ))}
+    </>
   );
 }

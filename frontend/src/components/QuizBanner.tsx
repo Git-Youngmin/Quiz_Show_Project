@@ -1,3 +1,4 @@
+import type { Choices } from "@quiz/shared";
 import { useGameStore, useSelfAlive } from "../store/useGameStore";
 import { useCountdown } from "../lib/useCountdown";
 
@@ -34,10 +35,14 @@ export function QuizBanner({ showSelfStatus = false }: { showSelfStatus?: boolea
       break;
     case "question_active": {
       const ratio = remaining === null ? 0 : remaining / (game.timeLimitSec * 1000);
+      const multiple = game.quizType === "MULTIPLE" && game.choices;
       content = (
         <>
-          <div className="banner-sub">문제 {game.round} · O 는 왼쪽, X 는 오른쪽!</div>
+          <div className="banner-sub">
+            문제 {game.round} · {multiple ? "정답 보기의 구역으로 이동하세요!" : "O 는 왼쪽, X 는 오른쪽!"}
+          </div>
           <div className="banner-question">{game.question}</div>
+          {multiple && <ChoiceGrid choices={game.choices!} />}
           <div className="timer-bar"><div style={{ transform: `scaleX(${ratio})` }} className={ratio < 0.3 ? "danger" : ""} /></div>
           <div className={`banner-time ${sec !== null && sec <= 3 ? "danger" : ""}`}>{sec}초</div>
         </>
@@ -49,13 +54,22 @@ export function QuizBanner({ showSelfStatus = false }: { showSelfStatus?: boolea
         <>
           <div className="banner-question">{game.question}</div>
           <div className={`banner-big answer-${game.answer}`}>정답은 {game.answer}!</div>
+          {game.quizType === "MULTIPLE" && game.choices && game.answer && (
+            <div className="banner-sub">{game.choices["ABCD".indexOf(game.answer)]}</div>
+          )}
         </>
       );
       break;
     case "elimination":
       content = (
         <>
-          <div className={`banner-big answer-${game.droppedZone}`}>{game.droppedZone} 구역 탈락!</div>
+          {game.droppedZones.length === 1 ? (
+            <div className={`banner-big answer-${game.droppedZones[0]}`}>{game.droppedZones[0]} 구역 탈락!</div>
+          ) : (
+            <div className="banner-big">
+              <span className={`answer-${game.answer}`}>{game.answer}</span> 외 모든 구역 탈락!
+            </div>
+          )}
           <div className="banner-sub">생존자 {aliveCount}명</div>
         </>
       );
@@ -90,5 +104,22 @@ export function QuizBanner({ showSelfStatus = false }: { showSelfStatus?: boolea
         </>
       )}
     </>
+  );
+}
+
+/** 4지선다 보기 2×2 (보드 배치와 같은 위치: A 좌상 · B 우상 · C 좌하 · D 우하) */
+export function ChoiceGrid({ choices, answer }: { choices: Choices; answer?: string | null }) {
+  return (
+    <div className="choice-grid">
+      {choices.map((text, i) => {
+        const letter = "ABCD"[i];
+        return (
+          <div key={letter} className={`choice-chip zone-${letter} ${answer && answer !== letter ? "dim" : ""}`}>
+            <b>{letter}</b>
+            <span>{text}</span>
+          </div>
+        );
+      })}
+    </div>
   );
 }

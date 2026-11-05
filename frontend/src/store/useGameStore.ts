@@ -16,13 +16,13 @@ import { create } from "zustand";
 import {
   INITIAL_GAME_STATE,
   wsPath,
-  type Answer,
   type CharacterShape,
   type ClientMessage,
   type GameState,
   type PlayerInfo,
   type Role,
   type ServerMessage,
+  type StartQuestionPayload,
   type Vec3,
 } from "@quiz/shared";
 
@@ -71,8 +71,8 @@ interface StoreState {
   sendMove: (x: number, y: number, z: number, rotY?: number) => void;
   /** 플레이어: 맵 밖으로 떨어졌음을 서버에 보고 (진행 중이면 탈락) */
   reportFell: () => void;
-  /** 관리자: 문제 출제 */
-  startQuestion: (question: string, answer: Answer, timeLimitSec: number) => void;
+  /** 관리자: 문제 출제 (OX / 4지선다) */
+  startQuestion: (payload: StartQuestionPayload) => void;
   /** 관리자: 진행 중단 + 전원 부활 */
   resetRound: () => void;
 }
@@ -99,7 +99,7 @@ let pendingMove: { p: Vec3; r: number } | null = null;
 let pendingMoveTimer: ReturnType<typeof setTimeout> | null = null;
 
 function resolveWsUrl({ roomId, role, name, shape, color }: ConnectOptions): string {
-  // 배포: VITE_WS_BASE=wss://xxx.workers.dev / 개발: 현재 host (Vite 프록시 → 8787)
+  // 별도 배포: VITE_WS_BASE=wss://서버주소 / 기본: 현재 host (개발 시 Vite 프록시 → 8787, 배포 시 같은 Node 서버)
   const base =
     import.meta.env.VITE_WS_BASE ??
     `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}`;
@@ -353,8 +353,7 @@ export const useGameStore = create<StoreState>()((set, get) => {
       rawSend({ type: "fell" });
     },
 
-    startQuestion: (question, answer, timeLimitSec) =>
-      rawSend({ type: "admin_start_question", question, answer, timeLimitSec }),
+    startQuestion: (payload) => rawSend({ type: "admin_start_question", ...payload }),
 
     resetRound: () => rawSend({ type: "admin_reset" }),
 

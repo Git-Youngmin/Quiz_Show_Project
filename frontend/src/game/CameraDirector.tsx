@@ -3,8 +3,8 @@ import { useFrame } from "@react-three/fiber";
 import { PerspectiveCamera } from "@react-three/drei";
 import { Vector3, type PerspectiveCamera as ThreePerspectiveCamera } from "three";
 import type { GamePhase } from "@quiz/shared";
-import { BOARD_SIZE } from "@quiz/shared";
 import { useGameStore } from "../store/useGameStore";
+import { zonesCenter } from "./zones";
 
 /**
  * 방송용 카메라 디렉터 — 게임 단계에 따라 카메라 위치/시선/화각을 연출한다.
@@ -74,7 +74,8 @@ export function CameraDirector() {
     const hasWinner = game.phase === "game_over" && !!winner;
     if (winner) winnerPos.set(winner.p[0], winner.p[1], winner.p[2]);
 
-    planShot(shot, game.phase, game.droppedZone, pt, t, centroid, n, spread, hasWinner ? winnerPos : null);
+    const dropped = zonesCenter(game.quizType, game.droppedZones);
+    planShot(shot, game.phase, dropped, pt, t, centroid, n, spread, hasWinner ? winnerPos : null);
 
     // ── 부드럽게 따라가기 ──
     const k = 1 - Math.exp(-dt * shot.speed);
@@ -100,7 +101,8 @@ export function CameraDirector() {
 function planShot(
   shot: Shot,
   phase: GamePhase,
-  droppedZone: "O" | "X" | null,
+  /** 꺼지는 구역들의 중심 (x, z) */
+  dropped: [number, number],
   pt: number,
   t: number,
   centroid: Vector3,
@@ -108,7 +110,6 @@ function planShot(
   spread: number,
   winner: Vector3 | null,
 ) {
-  const half = BOARD_SIZE / 2;
   shot.shake = 0;
 
   switch (phase) {
@@ -117,10 +118,10 @@ function planShot(
         // 멀리서 시작해 3.5초에 걸쳐 얼굴 앞까지 줌인 → 이후 가까이서 천천히 회전
         const k = Math.min(pt / 3.5, 1);
         const ease = 1 - Math.pow(1 - k, 3);
-        const dist = 14 - ease * 7.5; // 14 → 6.5 (머리 위 폭죽까지 프레임에 들어오는 거리)
+        const dist = 15 - ease * 7.5; // 15 → 7.5 (우승자 전신 + 머리 위 폭죽이 함께 들어오는 거리)
         const a = 0.3 + pt * 0.32;
-        shot.pos.set(winner.x + Math.sin(a) * dist, winner.y + 1.0 + dist * 0.18, winner.z + Math.cos(a) * dist);
-        shot.look.set(winner.x, winner.y + 1.8, winner.z);
+        shot.pos.set(winner.x + Math.sin(a) * dist, winner.y + 1.2 + dist * 0.2, winner.z + Math.cos(a) * dist);
+        shot.look.set(winner.x, winner.y + 1.3, winner.z);
         shot.fov = 46 - ease * 8; // 화각도 좁혀 더 극적으로
         shot.shake = pt < 0.5 ? 0.05 : 0;
         shot.speed = 2.2;
@@ -171,12 +172,12 @@ function planShot(
       break;
     }
     case "elimination": {
-      const zoneX = droppedZone === "O" ? -half / 2 : half / 2;
+      const [zoneX, zoneZ] = dropped;
       if (pt < 1.8 || survivors === 0) {
-        // ① 꺼지는 구역을 측면 위에서 내려다보며 추락 추적
+        // ① 꺼지는 구역(들)을 앞쪽 위에서 내려다보며 추락 추적
         const fall = Math.min(pt, 1.8) * 4; // 타일이 떨어지는 만큼 시선도 아래로
         shot.pos.set(zoneX * 0.2, 16, 22);
-        shot.look.set(zoneX, -fall, 0);
+        shot.look.set(zoneX, -fall, zoneZ);
         shot.fov = 40;
         shot.shake = pt < 0.6 ? 0.12 : 0.04; // 꺼지는 순간 강한 흔들림
         shot.speed = 3;

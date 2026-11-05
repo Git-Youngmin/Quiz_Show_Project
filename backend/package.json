@@ -1,22 +1,28 @@
 {
   "name": "@quiz/backend",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
-    "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
+    "dev": "tsx watch src/index.ts",
+    "build": "esbuild src/index.ts --bundle --platform=node --target=node20 --format=esm --external:ws --outfile=dist/server.js",
+    "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
-    "cf-typegen": "wrangler types",
     "test:ws": "node scripts/ws-smoke-test.mjs",
     "test:game": "node scripts/game-flow-test.mjs"
   },
   "dependencies": {
-    "@quiz/shared": "*"
+    "@quiz/shared": "*",
+    "ws": "^8.22.1"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^5.20261104.1",
-    "typescript": "^5.9.0",
-    "wrangler": "^4.157.0"
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.18.2",
+    "esbuild": "^0.28.2",
+    "tsx": "^4.23.15",
+    "typescript": "^5.9.0"
   }
 }

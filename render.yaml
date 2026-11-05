@@ -1,0 +1,16 @@
+# Render.com Blueprint — 무료 웹 서비스 1개로 프론트엔드 + WebSocket 서버를 함께 배포
+# (Render 대시보드 → New → Blueprint → 이 레포 선택)
+services:
+  - type: web
+    name: quiz-show
+    runtime: node
+    plan: free
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: "22"
+      # 다른 도메인에서 프론트엔드를 띄울 경우 해당 Origin 을 쉼표로 지정 (기본: 전체 허용)
+      - key: ALLOWED_ORIGINS
+        value: "*"

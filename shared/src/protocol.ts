@@ -1,5 +1,5 @@
 /**
- * 프론트엔드(React)와 백엔드(Durable Object)가 공유하는 WebSocket 메시지 규약.
+ * 프론트엔드(React)와 백엔드(Node.js GameRoom)가 공유하는 WebSocket 메시지 규약.
  * 모든 메시지는 JSON 문자열로 직렬화되며 `type` 필드로 구분한다.
  */
 
@@ -69,23 +69,53 @@ export type GamePhase =
   | "elimination" // 오답 구역 바닥 꺼짐
   | "game_over"; // 최후의 1인 결정 (관리자 리셋 전까지 유지)
 
-export type Answer = "O" | "X";
+// ───────────── 퀴즈 유형 / 구역 ─────────────
+
+/** OX: 보드 좌우 2분할 / MULTIPLE: 4지선다, 보드 십자 4분할 */
+export type QuizType = "OX" | "MULTIPLE";
+export type OXAnswer = "O" | "X";
+export type Choice = "A" | "B" | "C" | "D";
+/** 정답이자 보드 구역 이름 */
+export type Answer = OXAnswer | Choice;
+/** 4지선다 보기 텍스트 (A, B, C, D 순서) */
+export type Choices = [string, string, string, string];
+
+export const ZONES: Record<QuizType, readonly Answer[]> = {
+  OX: ["O", "X"],
+  MULTIPLE: ["A", "B", "C", "D"],
+};
+
+/**
+ * 좌표 → 구역 판정 (서버 판정·클라이언트 표시 공용)
+ *  OX       : x < 0 → O(왼쪽), x ≥ 0 → X(오른쪽)
+ *  MULTIPLE : 카메라 기본 시점 기준 화면 위쪽이 -z
+ *             A 좌상(x<0, z<0) · B 우상(x≥0, z<0) · C 좌하(x<0, z≥0) · D 우하(x≥0, z≥0)
+ */
+export function zoneAt(type: QuizType, x: number, z: number): Answer {
+  if (type === "OX") return x < 0 ? "O" : "X";
+  if (z < 0) return x < 0 ? "A" : "B";
+  return x < 0 ? "C" : "D";
+}
 
 /** 모든 클라이언트에게 공개되는 게임 상태 */
 export interface GameState {
   phase: GamePhase;
   /** 지금까지 출제된 문제 번호 (1부터) */
   round: number;
+  /** 현재(또는 마지막) 문제 유형 — 보드 분할 방식을 결정 */
+  quizType: QuizType;
   question: string | null;
+  /** 4지선다 보기 (OX 면 null) */
+  choices: Choices | null;
   /** 정답 — reveal 이후에만 공개 (그 전에는 항상 null) */
   answer: Answer | null;
-  /** 바닥이 꺼진 구역 (elimination 단계에서만 값이 있음) */
-  droppedZone: Answer | null;
+  /** 바닥이 꺼진 구역들 = 정답이 아닌 모든 구역 (elimination 단계에서만 값이 있음) */
+  droppedZones: Answer[];
   /** 현재 단계가 끝나는 서버 시각(epoch ms). null = 무기한 */
   phaseEndsAt: number | null;
   timeLimitSec: number;
   /**
-   * O/X 사이 차단벽이 솟아오르는 서버 시각(epoch ms).
+   * 구역 사이 차단벽(OX: 한 줄, MULTIPLE: 십자)이 솟아오르는 서버 시각(epoch ms).
    * question_active 종료 BARRIER_LEAD_MS 전 ~ elimination 끝까지 벽이 올라와 있음. null = 벽 내려감
    */
   barrierRaisesAt: number | null;
@@ -100,10 +130,14 @@ export type ClientMessage =
   | { type: "ping"; t: number }
   /** 플레이어: 스스로 맵 밖으로 떨어졌음을 보고 */
   | { type: "fell" }
-  /** 관리자: 문제 출제 */
-  | { type: "admin_start_question"; question: string; answer: Answer; timeLimitSec: number }
+  /** 관리자: 문제 출제 (MULTIPLE 이면 choices 4개 필수, answer 는 A~D) */
+  | ({ type: "admin_start_question" } & StartQuestionPayload)
   /** 관리자: 진행 중단 + 전원 부활 + 재배치 */
   | { type: "admin_reset" };
+
+export type StartQuestionPayload =
+  | { quizType: "OX"; question: string; answer: OXAnswer; timeLimitSec: number }
+  | { quizType: "MULTIPLE"; question: string; answer: Choice; choices: Choices; timeLimitSec: number };
 
 // ───────────── Server → Client ─────────────
 
@@ -138,10 +172,10 @@ export const WORLD_BOUNDS = 500;
 
 export const MAX_NAME_LENGTH = 16;
 export const MAX_QUESTION_LENGTH = 200;
+export const MAX_CHOICE_LENGTH = 60;
 
-/** 퀴즈 보드 크기 (윗면 y = 0, 중심 원점). x < 0 → O 구역, x ≥ 0 → X 구역 */
+/** 퀴즈 보드 크기 (윗면 y = 0, 중심 원점). 구역 판정은 zoneAt() */
 export const BOARD_SIZE = 30;
-export const zoneOfX = (x: number): Answer => (x < 0 ? "O" : "X");
 /** 이 높이 아래 = 보드에서 떨어진 것으로 간주 */
 export const FELL_Y = -2;
 
@@ -158,9 +192,11 @@ export const TIME_LIMIT_SEC = { min: 3, max: 60, default: 10 } as const;
 export const INITIAL_GAME_STATE: GameState = {
   phase: "waiting",
   round: 0,
+  quizType: "OX",
   question: null,
+  choices: null,
   answer: null,
-  droppedZone: null,
+  droppedZones: [],
   phaseEndsAt: null,
   timeLimitSec: TIME_LIMIT_SEC.default,
   barrierRaisesAt: null,
