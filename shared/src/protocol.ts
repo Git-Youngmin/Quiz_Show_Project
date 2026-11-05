@@ -57,17 +57,19 @@ export interface PlayerState {
 // ───────────── 게임 상태 ─────────────
 
 /**
- * 한 문제의 진행 단계
- *  waiting → countdown → question_active → reveal → elimination → waiting ...
- *                                                              └→ game_over (생존자 ≤ 1)
+ * 게임 진행 단계 (카훗 스타일: 관리자가 퀴즈 세트로 게임을 시작하고, 문제 사이마다 직접 넘김)
+ *
+ *  waiting ─(admin_start_game)→ countdown → question_active → reveal → elimination ─┬→ round_standings ─(admin_next_question)→ countdown …
+ *                                                                                   └→ game_over (생존자 ≤ 1 또는 문제 소진)
  */
 export type GamePhase =
-  | "waiting" // 대기 (관리자의 출제 대기)
+  | "waiting" // 로비: 참가자 입장 대기 (관리자의 게임 시작 대기)
   | "countdown" // 문제 공개 전 카운트다운
   | "question_active" // 문제 공개 + 제한 시간 진행
   | "reveal" // 시간 종료, 정답 발표
   | "elimination" // 오답 구역 바닥 꺼짐
-  | "game_over"; // 최후의 1인 결정 (관리자 리셋 전까지 유지)
+  | "round_standings" // 라운드 결과: 생존자 확인, 관리자의 "다음 문제" 대기
+  | "game_over"; // 우승자 결정 (다시 게임 시작 또는 리셋 전까지 유지)
 
 // ───────────── 퀴즈 유형 / 구역 ─────────────
 
@@ -100,8 +102,12 @@ export function zoneAt(type: QuizType, x: number, z: number): Answer {
 /** 모든 클라이언트에게 공개되는 게임 상태 */
 export interface GameState {
   phase: GamePhase;
-  /** 지금까지 출제된 문제 번호 (1부터) */
+  /** 현재 문제 번호 (1부터, 시작 전 0) */
   round: number;
+  /** 이번 게임의 전체 문제 수 (시작 전 0) */
+  totalQuestions: number;
+  /** 직전 라운드에서 탈락한 인원 (round_standings 표시용) */
+  lastEliminatedCount: number;
   /** 현재(또는 마지막) 문제 유형 — 보드 분할 방식을 결정 */
   quizType: QuizType;
   question: string | null;
@@ -130,16 +136,22 @@ export type ClientMessage =
   | { type: "ping"; t: number }
   /** 플레이어: 스스로 맵 밖으로 떨어졌음을 보고 */
   | { type: "fell" }
-  /** 관리자: 문제 출제 (MULTIPLE 이면 choices 4개 필수, answer 는 A~D) */
-  | ({ type: "admin_start_question" } & StartQuestionPayload)
-  /** 관리자: 진행 중단 + 전원 부활 + 재배치 */
+  /** 관리자: 퀴즈 세트(최대 MAX_QUIZ_ITEMS 문제)로 게임 시작 — 전원 부활 후 1번 문제부터 */
+  | { type: "admin_start_game"; quizzes: QuizItem[] }
+  /** 관리자: round_standings 에서 다음 문제 출제 */
+  | { type: "admin_next_question" }
+  /** 관리자: 진행 중단 + 전원 부활 + 재배치 (로비로) */
   | { type: "admin_reset" }
   /** 탈락자: 관전석의 투척 발판(pad 번호)을 밟아 방해물 발사 요청 */
   | { type: "throw_item"; pad: number };
 
-export type StartQuestionPayload =
+/** 퀴즈 세트의 문제 하나 */
+export type QuizItem =
   | { quizType: "OX"; question: string; answer: OXAnswer; timeLimitSec: number }
   | { quizType: "MULTIPLE"; question: string; answer: Choice; choices: Choices; timeLimitSec: number };
+
+/** 퀴즈 세트 최대 문제 수 */
+export const MAX_QUIZ_ITEMS = 50;
 
 // ───────────── Server → Client ─────────────
 
@@ -198,6 +210,8 @@ export const TIME_LIMIT_SEC = { min: 3, max: 60, default: 10 } as const;
 export const INITIAL_GAME_STATE: GameState = {
   phase: "waiting",
   round: 0,
+  totalQuestions: 0,
+  lastEliminatedCount: 0,
   quizType: "OX",
   question: null,
   choices: null,
@@ -348,6 +362,8 @@ export const CLOSE_CODE = {
   ADMIN_AUTH_FAILED: 4001,
   ROOM_NOT_FOUND: 4004,
   TOO_MANY_ATTEMPTS: 4029,
+  /** 참가자 정원(MAX_PLAYERS_PER_ROOM) 초과 */
+  ROOM_FULL: 4009,
 } as const;
 
 /** POST /api/rooms 요청 본문 — 방 생성 + 방장 비밀번호 설정 */

@@ -5,8 +5,9 @@
  * 1. 소켓별 상태는 Map<WebSocket, Session>, 게임 상태는 필드로 보관
  *    (서버 재시작 시 방 상태는 초기화됨 — 무료 호스팅 환경에서 허용 가능한 트레이드오프)
  * 2. 위치 브로드캐스트는 "배치 스냅샷" (dirty 플레이어만 SNAPSHOT_INTERVAL_MS 마다)
- * 3. 게임 진행 타이머는 setTimeout 하나(phaseTimer)로 단계 전환
- *    waiting → countdown → question_active → reveal → elimination → waiting | game_over
+ * 3. 게임 진행 타이머는 setTimeout 하나(phaseTimer)로 단계 전환 (카훗 스타일 퀴즈 세트)
+ *    waiting ─(admin_start_game)→ countdown → question_active → reveal → elimination
+ *      → round_standings ─(admin_next_question)→ countdown … → game_over
  * 4. 퀴즈 유형: OX(좌우 2분할) / MULTIPLE(십자 4분할) — 구역 판정은 shared 의 zoneAt()
  */
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
@@ -27,6 +28,7 @@ import {
   MAX_NAME_LENGTH,
   MAX_PLAYERS_PER_ROOM,
   MAX_QUESTION_LENGTH,
+  MAX_QUIZ_ITEMS,
   PHASE_DURATION_MS,
   SNAPSHOT_INTERVAL_MS,
   TIME_LIMIT_SEC,
@@ -41,6 +43,7 @@ import {
   type GameState,
   type PlayerInfo,
   type PlayerState,
+  type QuizItem,
   type QuizType,
   type Role,
   type ServerMessage,
@@ -68,6 +71,10 @@ export class GameRoom {
   private game: GameState = { ...INITIAL_GAME_STATE };
   /** 출제된 정답 — reveal 전까지 클라이언트에 보내지 않음 */
   private secretAnswer: Answer | null = null;
+  /** 이번 게임의 퀴즈 세트 (서버만 보관 — 클라이언트에는 진행 중인 문제만 공개) */
+  private quizzes: QuizItem[] = [];
+  /** 이번 라운드(문제)에서 탈락한 인원 — round_standings 에 표시 */
+  private eliminatedThisRound = 0;
   /** reveal 시작(=차단벽이 완전히 올라온 뒤) 시점의 플레이어별 구역 — 판정 기준 */
   private lockedZones = new Map<string, Answer>();
   /** 방해물 투척 쿨타임 */
@@ -105,14 +112,14 @@ export class GameRoom {
 
   // ───────────── 접속 처리 ─────────────
 
-  /** 업그레이드 전에 입장 가능 여부 확인. 거부 사유를 반환 */
-  canJoin(params: URLSearchParams): { code: number; message: string } | null {
-    const role = parseRole(params.get("role"));
-    if (!role) return { code: 400, message: "Bad Request" };
-    if (role === "player" && this.playerCount() >= MAX_PLAYERS_PER_ROOM) {
-      return { code: 429, message: "Room Full" };
-    }
-    return null;
+  /** 업그레이드 전에 입장 가능 여부 확인 (잘못된 role) */
+  isValidRole(params: URLSearchParams): boolean {
+    return parseRole(params.get("role")) !== null;
+  }
+
+  /** 참가자 정원 초과 여부 (관리자/송출 화면은 정원에 포함되지 않음) */
+  isFull(): boolean {
+    return this.playerCount() >= MAX_PLAYERS_PER_ROOM;
   }
 
   join(ws: WebSocket, params: URLSearchParams) {
@@ -216,9 +223,14 @@ export class GameRoom {
         this.throwItem(ws, session, msg.pad);
         break;
 
-      case "admin_start_question":
+      case "admin_start_game":
         if (!this.requireAdmin(ws, session)) return;
-        this.startQuestion(ws, msg as unknown as Record<string, unknown>);
+        this.startGame(ws, (msg as { quizzes?: unknown }).quizzes);
+        break;
+
+      case "admin_next_question":
+        if (!this.requireAdmin(ws, session)) return;
+        this.nextQuestion(ws);
         break;
 
       case "admin_reset":
@@ -239,57 +251,68 @@ export class GameRoom {
     return false;
   }
 
+  /** 문제가 진행 중인지 (이때 떨어지면 탈락). 로비/라운드 결과/게임 종료 중에는 리스폰 */
   private isQuestionInProgress() {
-    return this.game.phase !== "waiting" && this.game.phase !== "game_over";
+    const p = this.game.phase;
+    return p !== "waiting" && p !== "round_standings" && p !== "game_over";
   }
 
-  private startQuestion(ws: WebSocket, msg: Record<string, unknown>) {
+  /** 퀴즈 세트로 게임 시작: 전원 부활 + 재배치 후 1번 문제 카운트다운 */
+  private startGame(ws: WebSocket, raw: unknown) {
     const fail = (message: string) => this.send(ws, { type: "error", message });
+    if (this.game.phase !== "waiting" && this.game.phase !== "game_over") {
+      return fail("게임이 진행 중입니다. 중단하려면 '게임 중단(리셋)'을 누르세요");
+    }
+    if (!Array.isArray(raw) || raw.length === 0) return fail("문제를 1개 이상 추가하세요");
+    if (raw.length > MAX_QUIZ_ITEMS) return fail(`문제는 최대 ${MAX_QUIZ_ITEMS}개까지 가능합니다`);
 
-    if (this.game.phase === "game_over") return fail("게임이 끝났습니다. 라운드 리셋 후 새 게임을 시작하세요");
-    if (this.game.phase !== "waiting") return fail("이미 문제가 진행 중입니다");
-
-    const quizType: QuizType = msg.quizType === "MULTIPLE" ? "MULTIPLE" : "OX";
-    const question = typeof msg.question === "string" ? msg.question.trim().slice(0, MAX_QUESTION_LENGTH) : "";
-    if (!question) return fail("질문을 입력하세요");
-
-    const answer = msg.answer as Answer;
-    if (!ZONES[quizType].includes(answer)) {
-      return fail(quizType === "OX" ? "정답은 O 또는 X 여야 합니다" : "정답은 A~D 중 하나여야 합니다");
+    const quizzes: QuizItem[] = [];
+    for (let i = 0; i < raw.length; i++) {
+      const res = validateQuiz(raw[i]);
+      if (typeof res === "string") return fail(`${i + 1}번 문제: ${res}`);
+      quizzes.push(res);
     }
 
-    let choices: Choices | null = null;
-    if (quizType === "MULTIPLE") {
-      const raw = msg.choices;
-      if (!Array.isArray(raw) || raw.length !== 4) return fail("보기 4개를 모두 입력하세요");
-      const cleaned = raw.map((c) => (typeof c === "string" ? c.trim().slice(0, MAX_CHOICE_LENGTH) : ""));
-      if (cleaned.some((c) => !c)) return fail("보기 4개를 모두 입력하세요");
-      choices = cleaned as Choices;
-    }
+    this.quizzes = quizzes;
+    this.revivePlayers();
+    this.beginQuestion(0);
+  }
 
-    const sec = Number.isFinite(msg.timeLimitSec) ? Number(msg.timeLimitSec) : TIME_LIMIT_SEC.default;
-    this.secretAnswer = answer;
+  /** round_standings 에서 다음 문제로 */
+  private nextQuestion(ws: WebSocket) {
+    if (this.game.phase !== "round_standings") {
+      this.send(ws, { type: "error", message: "라운드 결과 화면에서만 다음 문제를 낼 수 있습니다" });
+      return;
+    }
+    this.beginQuestion(this.game.round); // round 는 1부터 → 다음 문제의 인덱스
+  }
+
+  private beginQuestion(index: number) {
+    const q = this.quizzes[index];
+    if (!q) return;
+    this.secretAnswer = q.answer;
+    this.eliminatedThisRound = 0;
     this.setPhase(
       {
         phase: "countdown",
-        round: this.game.round + 1,
-        quizType,
-        question,
-        choices,
+        round: index + 1,
+        totalQuestions: this.quizzes.length,
+        quizType: q.quizType,
+        question: q.question,
+        choices: q.quizType === "MULTIPLE" ? q.choices : null,
         answer: null,
         droppedZones: [],
-        timeLimitSec: Math.round(Math.max(TIME_LIMIT_SEC.min, Math.min(TIME_LIMIT_SEC.max, sec))),
+        barrierRaisesAt: null,
+        winnerId: null,
+        lastEliminatedCount: 0,
+        timeLimitSec: q.timeLimitSec,
       },
       PHASE_DURATION_MS.countdown,
     );
   }
 
-  /** 진행 중단 + 전원 부활 + 새 스폰 위치 배정 */
-  private resetRound() {
-    this.clearPhaseTimer();
-    this.secretAnswer = null;
-    this.lockedZones.clear();
-
+  /** 전원 부활 + 새 스폰 위치 (클라이언트는 round_reset 으로 내 캐릭터를 새 위치에 재생성) */
+  private revivePlayers() {
     for (const s of this.sessions.values()) {
       if (!s.player) continue;
       s.player.alive = true;
@@ -298,9 +321,17 @@ export class GameRoom {
     }
     this.dirty.clear();
     this.broadcast({ type: "round_reset", players: this.playerList() });
+  }
 
+  /** 진행 중단 + 전원 부활 → 로비(waiting) */
+  private resetRound() {
+    this.clearPhaseTimer();
+    this.secretAnswer = null;
+    this.lockedZones.clear();
+    this.quizzes = [];
+    this.revivePlayers();
     // 보드 모양(quizType)은 유지해서 리셋 직후 바닥이 바뀌지 않게
-    this.setPhase({ ...INITIAL_GAME_STATE, round: this.game.round, quizType: this.game.quizType }, null);
+    this.setPhase({ ...INITIAL_GAME_STATE, quizType: this.game.quizType }, null);
   }
 
   // ───────────── 방해물 투척 (탈락자 전용) ─────────────
@@ -404,23 +435,28 @@ export class GameRoom {
         this.secretAnswer = null;
         this.lockedZones.clear();
         const survivors = this.playerList().filter((p) => p.alive);
-        if (survivors.length <= 1) {
-          // 최후의 1인 (또는 전원 탈락) → 게임 종료. 관리자 리셋 전까지 유지
+        const outOfQuestions = this.game.round >= this.quizzes.length;
+        const common = {
+          droppedZones: [],
+          barrierRaisesAt: null,
+          lastEliminatedCount: this.eliminatedThisRound,
+        } satisfies Partial<GameState>;
+        if (survivors.length <= 1 || outOfQuestions) {
+          // 최후의 1인 / 전원 탈락 / 문제 소진 → 게임 종료.
+          // 문제를 다 썼는데 여러 명이 살아남았으면 공동 생존 (winnerId = null, 배너에서 생존자 수 표시)
           this.setPhase(
-            { phase: "game_over", winnerId: survivors[0]?.id ?? null, droppedZones: [], barrierRaisesAt: null },
+            { ...common, phase: "game_over", winnerId: survivors.length === 1 ? survivors[0].id : null },
             null,
           );
         } else {
-          // 바닥 복구 + 벽 내림 → 다음 문제 대기 (생존자 유지)
-          this.setPhase(
-            { phase: "waiting", question: null, choices: null, answer: null, droppedZones: [], barrierRaisesAt: null },
-            null,
-          );
+          // 바닥 복구 + 벽 내림 → 라운드 결과 화면에서 관리자의 "다음 문제" 대기
+          this.setPhase({ ...common, phase: "round_standings", answer: this.game.answer }, null);
         }
         break;
       }
 
       case "waiting":
+      case "round_standings":
       case "game_over":
         break;
     }
@@ -456,6 +492,7 @@ export class GameRoom {
         out.push(s.player.id);
       }
     }
+    this.eliminatedThisRound += out.length;
     if (out.length > 0) this.broadcast({ type: "players_eliminated", ids: out });
   }
 
@@ -536,6 +573,26 @@ function sanitizeVec3(v: unknown): Vec3 | null {
   if (!out.every(Number.isFinite)) return null;
   const clamp = (n: number) => Math.max(-WORLD_BOUNDS, Math.min(WORLD_BOUNDS, n));
   return [clamp(out[0]), clamp(out[1]), clamp(out[2])];
+}
+
+/** 퀴즈 세트의 문제 하나를 검증·정리. 문제가 있으면 사유 문자열 반환 */
+function validateQuiz(raw: unknown): QuizItem | string {
+  if (!raw || typeof raw !== "object") return "형식이 올바르지 않습니다";
+  const m = raw as Record<string, unknown>;
+  const quizType: QuizType = m.quizType === "MULTIPLE" ? "MULTIPLE" : "OX";
+  const question = typeof m.question === "string" ? m.question.trim().slice(0, MAX_QUESTION_LENGTH) : "";
+  if (!question) return "질문이 비어 있습니다";
+  const sec = Number.isFinite(m.timeLimitSec) ? Number(m.timeLimitSec) : TIME_LIMIT_SEC.default;
+  const timeLimitSec = Math.round(Math.max(TIME_LIMIT_SEC.min, Math.min(TIME_LIMIT_SEC.max, sec)));
+  const answer = m.answer as Answer;
+  if (!ZONES[quizType].includes(answer)) {
+    return quizType === "OX" ? "정답은 O 또는 X 여야 합니다" : "정답은 A~D 중 하나여야 합니다";
+  }
+  if (quizType === "OX") return { quizType, question, answer: answer as "O" | "X", timeLimitSec };
+  if (!Array.isArray(m.choices) || m.choices.length !== 4) return "보기 4개를 모두 입력하세요";
+  const choices = m.choices.map((c) => (typeof c === "string" ? c.trim().slice(0, MAX_CHOICE_LENGTH) : ""));
+  if (choices.some((c) => !c)) return "보기 4개를 모두 입력하세요";
+  return { quizType, question, answer: answer as "A" | "B" | "C" | "D", choices: choices as Choices, timeLimitSec };
 }
 
 /** 방해물 종류: 바나나 50% · 상자 25% · 공 25% */

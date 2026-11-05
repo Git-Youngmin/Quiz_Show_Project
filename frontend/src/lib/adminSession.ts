@@ -41,4 +41,5 @@ export const CLOSE_REASON: Record<number, string> = {
   [CLOSE_CODE.ADMIN_AUTH_FAILED]: "비밀번호가 올바르지 않습니다.",
   [CLOSE_CODE.ROOM_NOT_FOUND]: "방장이 없는 방입니다. '새 방 만들기'로 먼저 방을 만들어 주세요.",
   [CLOSE_CODE.TOO_MANY_ATTEMPTS]: "로그인 시도가 너무 많습니다. 5분 뒤에 다시 시도해 주세요.",
+  [CLOSE_CODE.ROOM_FULL]: "방이 가득 찼습니다.",
 };

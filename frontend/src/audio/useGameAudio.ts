@@ -45,6 +45,7 @@ export function useGameAudio(mode: "play" | "display") {
       clearTimers();
       switch (phase) {
         case "waiting":
+        case "round_standings":
           audio.playBgm("waiting", 1200);
           break;
         case "countdown": {

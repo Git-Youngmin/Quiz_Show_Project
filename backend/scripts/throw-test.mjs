@@ -39,7 +39,7 @@ await sleep(150);
 check("생존자의 투척 요청 무시", items(display).length === 0);
 
 // 문제 진행 중 Bob, Carol 이 떨어져 탈락 → 관전석 발판으로 이동
-send(admin, { type: "admin_start_question", quizType: "OX", question: "Q", answer: "O", timeLimitSec: 20 });
+send(admin, { type: "admin_start_game", quizzes: [{ quizType: "OX", question: "Q", answer: "O", timeLimitSec: 20 }] });
 await sleep(3300); // countdown 끝
 send(bob, { type: "fell" }); send(carol, { type: "fell" });
 await sleep(150);

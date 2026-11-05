@@ -24,7 +24,7 @@ import {
   type PlayerInfo,
   type Role,
   type ServerMessage,
-  type StartQuestionPayload,
+  type QuizItem,
   type ThrownItem,
   type Vec3,
 } from "@quiz/shared";
@@ -100,8 +100,10 @@ interface StoreState {
   throwItem: (pad: number, at?: Vec3) => void;
   /** 수명이 다한 방해물 제거 */
   removeObstacle: (id: number) => void;
-  /** 관리자: 문제 출제 (OX / 4지선다) */
-  startQuestion: (payload: StartQuestionPayload) => void;
+  /** 관리자: 퀴즈 세트로 게임 시작 */
+  startGame: (quizzes: QuizItem[]) => void;
+  /** 관리자: 라운드 결과 화면에서 다음 문제 출제 */
+  nextQuestion: () => void;
   /** 관리자: 진행 중단 + 전원 부활 */
   resetRound: () => void;
 }
@@ -431,7 +433,9 @@ export const useGameStore = create<StoreState>()((set, get) => {
       rawSend({ type: "fell" });
     },
 
-    startQuestion: (payload) => rawSend({ type: "admin_start_question", ...payload }),
+    startGame: (quizzes) => rawSend({ type: "admin_start_game", quizzes }),
+
+    nextQuestion: () => rawSend({ type: "admin_next_question" }),
 
     resetRound: () => rawSend({ type: "admin_reset" }),
 
@@ -481,3 +485,13 @@ export const useSelfAlive = () =>
 if (import.meta.env.DEV) {
   (window as unknown as { __gameStore: typeof useGameStore }).__gameStore = useGameStore;
 }
+
+/** 현재 방의 참가자 수 (관리자/송출 화면 제외) */
+export const usePlayerCount = () => useGameStore((s) => s.playerIds.length);
+/** 생존자 수 */
+export const useAliveCount = () =>
+  useGameStore((s) => {
+    let n = 0;
+    for (const id in s.players) if (s.players[id].alive) n++;
+    return n;
+  });

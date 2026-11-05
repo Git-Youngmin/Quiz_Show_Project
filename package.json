@@ -16,7 +16,8 @@
     "test:ws": "npm run test:ws -w backend",
     "test:game": "npm run test:game -w backend",
     "test:auth": "npm run test:auth -w backend",
-    "test:throw": "npm run test:throw -w backend"
+    "test:throw": "npm run test:throw -w backend",
+    "test:quizset": "npm run test:quizset -w backend"
   },
   "engines": {
     "node": ">=20"

@@ -187,7 +187,7 @@ export function LocalPlayer({ spawn, color, shape, name, alive }: Props) {
         rb.setTranslation(s.pos, true);
         rb.setLinvel({ x: 0, y: 0, z: 0 }, true);
       }
-    } else if (store.game.phase === "waiting" || store.game.phase === "game_over") {
+    } else if (store.game.phase === "waiting" || store.game.phase === "round_standings" || store.game.phase === "game_over") {
       // 진행 중이 아닐 때는 탈락 없이 리스폰
       if (pos.y < FALL_LIMIT_Y) {
         rb.setTranslation(spawnPos, true);

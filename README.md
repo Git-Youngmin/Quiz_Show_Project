@@ -2,6 +2,7 @@
 
 **폴가이즈 스타일 3D 서바이벌 + 카훗 스타일 실시간 퀴즈**를 합친 멀티플레이어 웹 게임입니다.
 참가자는 폰이나 PC로 접속해 캐릭터를 움직여 **정답 구역에 서 있어야** 합니다. 시간이 끝나면 오답 구역의 바닥이 꺼지고, 마지막까지 살아남은 1명이 우승합니다.
+방장은 최대 50문제의 **퀴즈 세트**를 미리 만들어 두고, 문제 사이마다 결과를 보여 준 뒤 다음 문제를 넘기며 게임을 진행합니다. 한 방에 최대 100명까지 참가할 수 있습니다.
 
 ![송출 화면: 정답 발표 직전, 차단벽이 솟아오르고 오답 구역이 깜빡입니다](docs/screenshots/reveal-barrier.jpg)
 
@@ -12,10 +13,20 @@
 | ![로비](docs/screenshots/lobby.jpg) | ![모바일](docs/screenshots/mobile.jpg) |
 | 닉네임, 방 코드, 몸통 모양 4종, 색상 6종을 고르고 입장합니다 | 폰에서는 조이스틱과 점프 버튼으로 조작합니다 |
 
+| 게임 시작 전: 실시간 접속자 수 | 관리자 대시보드 (라운드 결과에서 다음 문제 출제) |
+|---|---|
+| ![로비 접속자 수](docs/screenshots/play-lobby.jpg) | ![관리자 대시보드](docs/screenshots/admin.jpg) |
+| 대기 중에는 "현재 접속자 6 / 100명"이 크게 표시됩니다 | 퀴즈 세트 목록과 진행 패널. 끝난 문제는 "완료", 다음 문제는 "다음"으로 표시됩니다 |
+
 | 문제 진행 (참가자 화면) | 오답 구역 바닥 꺼짐 |
 |---|---|
 | ![문제 진행](docs/screenshots/play-question.jpg) | ![바닥 꺼짐](docs/screenshots/elimination-drop.jpg) |
 | O는 왼쪽, X는 오른쪽. 남은 시간이 화면 위에 표시됩니다 | 오답 구역 타일이 기울어지며 떨어지고, 위에 있던 캐릭터도 함께 떨어집니다 |
+
+| 라운드 결과 | 송출 화면 (대기 중) |
+|---|---|
+| ![라운드 결과](docs/screenshots/round-standings.jpg) | ![대기](docs/screenshots/display-waiting.jpg) |
+| 문제가 끝나면 생존·탈락·남은 문제 수를 보여 주고, 방장이 넘길 때까지 기다립니다 | 보드 뒤쪽 좌·우 대각선 위에 관전석 2곳이 보입니다 |
 
 | 4지선다 모드 + 방해물 투척 | 십자 차단벽 + 3구역 탈락 |
 |---|---|
@@ -28,15 +39,11 @@
 | 보드 뒤쪽 대각선의 관전석. 분홍 발판을 밟으면 벽 위 발사대에서 방해물이 날아갑니다 | 최후의 1인에게 카메라가 줌인하고 머리 위로 색종이가 터집니다 |
 
 <details>
-<summary>관리자 로그인 · 관리자 패널 · 대기 화면 보기</summary>
+<summary>관리자 로그인 · 퀴즈 세트 빌더 보기</summary>
 
-| 관리자 로그인 | 관리자 패널 (4지선다 출제) |
+| 관리자 로그인 | 퀴즈 세트 빌더 (게임 시작 전) |
 |---|---|
-| ![관리자 로그인](docs/screenshots/admin-login.jpg) | ![관리자](docs/screenshots/admin.jpg) |
-
-| 송출 화면 (대기 중) | |
-|---|---|
-| ![대기](docs/screenshots/display-waiting.jpg) | 보드 뒤쪽 좌·우 대각선 위에 관전석 2곳이 보입니다 |
+| ![관리자 로그인](docs/screenshots/admin-login.jpg) | ![퀴즈 세트 빌더](docs/screenshots/admin-builder.jpg) |
 
 </details>
 
@@ -53,14 +60,17 @@
 |---|---|---|
 | `/` | 참가자 | 로비 (닉네임·방 코드·캐릭터 선택) |
 | `/play?room=…` | 참가자 | 3D 플레이 화면 (PC: WASD/방향키 + Space, 모바일: 조이스틱) |
-| `/admin?room=…` | 진행자 | **방장 비밀번호 로그인** 후 문제 출제(O/X · 4지선다), 진행 상황, 라운드 리셋 |
+| `/admin?room=…` | 진행자 | **방장 비밀번호 로그인** 후 퀴즈 세트 만들기, 게임 시작, 다음 문제 출제, 게임 중단 |
 | `/display?room=…` | 방송 송출 | UI를 최소화한 관전 뷰, 게임 단계별 다이나믹 카메라 |
 
 ## 방송 진행 순서
 
 1. `/admin`에서 **새 방 만들기**를 고르고, 방 코드와 방장 비밀번호를 정합니다.
 2. 관리자 패널 아래쪽의 **참가 링크**를 참가자에게 공유하고, **송출 화면** 주소를 OBS 브라우저 소스에 넣습니다.
-3. 참가자가 모이면 문제를 출제합니다. 마지막 1명이 남으면 우승 연출이 나오고, **라운드 리셋**으로 새 게임을 시작합니다.
+3. **퀴즈 세트**를 만듭니다. 예시 세트를 불러오거나, 문제를 추가하고 수정·복제·삭제·순서 변경할 수 있습니다. 세트는 브라우저에 자동 저장되고 JSON으로 내보내거나 불러올 수 있습니다.
+4. 참가자가 모이면 **[▶ 게임 시작]** 을 누릅니다. 세트 전체가 서버로 전송되고 1번 문제부터 시작합니다.
+5. 문제가 끝날 때마다 **라운드 결과** 화면에서 멈춥니다. 준비되면 **[다음 문제 출제 ▶]** 를 누릅니다.
+6. 생존자가 1명 이하가 되거나 문제를 모두 쓰면 게임이 끝납니다. 같은 세트로 **[새 게임 시작]** 을 누르면 전원 부활 후 다시 시작합니다.
 
 > 관리자 페이지를 새로고침해도 같은 탭에서는 로그인이 유지됩니다(`sessionStorage`). 탭을 닫으면 다시 입력해야 합니다.
 
@@ -136,6 +146,10 @@ npm run test:auth
 npm run test:throw
 ```
 
+```bash
+npm run test:quizset
+```
+
 `test:auth`는 실패 횟수 제한까지 검증하므로 백엔드를 `TRUST_PROXY=1`로 실행한 상태에서 돌려야 합니다.
 
 ## 무료 배포 (Render.com)
@@ -161,8 +175,8 @@ Node 서버 하나가 **빌드된 프론트엔드와 WebSocket을 함께 서빙*
 ## 게임 규칙과 흐름
 
 ```
-waiting ─(관리자 출제)→ countdown 3s → question_active N초 → reveal 3s → elimination 4.5s ─┬→ waiting
-                                                                                         └→ game_over (생존자 ≤ 1)
+waiting ─[게임 시작]→ countdown 3s → question_active N초 → reveal 3s → elimination 4.5s ─┬→ round_standings ─[다음 문제]→ countdown …
+                                                                                         └→ game_over (생존자 ≤ 1 또는 문제 소진)
 ```
 
 | 퀴즈 유형 | 보드 분할 | 정답 구역 |
@@ -174,7 +188,10 @@ waiting ─(관리자 출제)→ countdown 3s → question_active N초 → revea
 - 제한 시간 종료 1.5초 전에 구역 사이 차단벽이 솟아오릅니다. 모든 기기가 서버 시계에 맞춰 같은 순간에 움직입니다.
 - 정답 발표 시점에 각 플레이어의 구역을 확정해 두고, 그 값으로 탈락을 판정합니다. 벽이 올라온 뒤 위치를 조작해도 결과가 바뀌지 않습니다.
 - 탈락자는 바닥을 뚫고 떨어진 뒤 두 관전석 중 한 곳으로 이동합니다.
-- 생존자가 1명 이하가 되면 `game_over`입니다. 관리자가 라운드를 리셋하면 새 게임이 시작됩니다.
+- 한 방의 참가자는 최대 100명입니다(관리자·송출 화면 제외). 가득 차면 새 참가자는 close code `4009`로 거절되고 "방이 가득 찼어요" 화면이 나옵니다.
+- 다음 문제 내용은 진행되기 전까지 클라이언트에 보내지 않습니다. 서버가 세트 전체를 비공개로 보관합니다.
+- 생존자가 1명 이하가 되면 남은 문제가 있어도 `game_over`입니다. 문제를 모두 썼는데 여러 명이 살아 있으면 **공동 우승**입니다.
+- 라운드 결과·대기 중에 떨어지면 탈락하지 않고 다시 나타납니다.
 - 캐릭터 모양은 4가지지만, 물리 충돌체는 모두 같은 크기의 캡슐이라 유불리가 없습니다.
 
 ## 탈락자 방해물 투척
@@ -199,7 +216,7 @@ waiting ─(관리자 출제)→ countdown 3s → question_active N초 → revea
 | 요청 | 설명 |
 |---|---|
 | `POST /api/rooms` | `{ roomId, adminPassword }` 방 생성 + 방장 비밀번호 설정. `201` 생성 / `409` 이미 방장이 있음 / `400` 형식 오류 |
-| `WS /api/rooms/:roomId/ws?role=player&name=…&shape=…&color=…` | 참가자 |
+| `WS /api/rooms/:roomId/ws?role=player&name=…&shape=…&color=…` | 참가자. 정원(100명) 초과 시 close code `4009` |
 | `WS /api/rooms/:roomId/ws?role=display` | 송출 화면 |
 | `WS /api/rooms/:roomId/ws?role=admin&password=…` | 관리자. 거부되면 close code `4001` 비밀번호 오류 / `4004` 방장 없는 방 / `4029` 시도 초과 |
 
@@ -208,13 +225,14 @@ waiting ─(관리자 출제)→ countdown 3s → question_active N초 → revea
 | C→S | `move` | `{ p: [x,y,z], r }` 내 위치/회전 (player 전용, 최대 20Hz) |
 | C→S | `ping` | `{ t }` 지연 측정·시계 보정 |
 | C→S | `fell` | 보드 밖으로 떨어짐 (문제 진행 중이면 탈락) |
-| C→S | `admin_start_question` | `{ quizType: "OX", answer: "O"\|"X" }` 또는 `{ quizType: "MULTIPLE", answer: "A"~"D", choices: [4개] }` + `question`, `timeLimitSec` |
-| C→S | `admin_reset` | 진행 중단 + 전원 부활 + 재배치 |
+| C→S | `admin_start_game` | `{ quizzes: QuizItem[] }` 최대 50문제. 각 문제는 `{ quizType: "OX", answer: "O"\|"X" }` 또는 `{ quizType: "MULTIPLE", answer: "A"~"D", choices: [4개] }` + `question`, `timeLimitSec` |
+| C→S | `admin_next_question` | 라운드 결과 화면에서 다음 문제 출제 |
+| C→S | `admin_reset` | 진행 중단 + 전원 부활 + 재배치 (로비로) |
 | C→S | `throw_item` | `{ pad: 0~3 }` 탈락자가 투척 발판을 밟음 (관전석마다 2개) |
 | S→C | `welcome` | 접속 직후: 내 id, 플레이어 목록(외형 포함), 게임 상태, 서버 시각 |
 | S→C | `player_joined` / `player_left` | 입장·퇴장 |
 | S→C | `snapshot` | 약 15Hz, 움직인 플레이어의 위치·회전만 |
-| S→C | `game_state` | `{ phase, round, quizType, question, choices, answer, droppedZones, phaseEndsAt, barrierRaisesAt, winnerId }` |
+| S→C | `game_state` | `{ phase, round, totalQuestions, lastEliminatedCount, quizType, question, choices, answer, droppedZones, phaseEndsAt, barrierRaisesAt, winnerId }` |
 | S→C | `players_eliminated` | `{ ids }` |
 | S→C | `round_reset` | 전원 부활 + 새 스폰 위치 |
 | S→C | `item_spawned` | `{ item: { id, kind, origin, direction, speed, throwerId } }` 방해물 발사 |

@@ -37,13 +37,14 @@ const admin = await connect("admin", { role: "admin", password: "test-pass" });
 const alice = await connect("alice", { role: "player", name: "Alice" });
 const bob = await connect("bob", { role: "player", name: "Bob" });
 await sleep(200);
+
+send(bob, { type: "admin_start_game", quizzes: [{ question: "hack", answer: "X", timeLimitSec: 3 }] }); // 권한 없음
+send(admin, { type: "admin_start_game", quizzes: [{ question: "지구는 둥글다?", answer: "O", timeLimitSec: 3 }] });
+await sleep(200);
+// 게임 시작 시 전원이 새 스폰 위치로 옮겨지므로(round_reset) 그 뒤에 각자 구역으로 이동
 send(alice, { type: "move", p: [-5, 0.8, 0], r: 0 });
 send(bob, { type: "move", p: [5, 0.8, 0], r: 0 });
-
-send(bob, { type: "admin_start_question", question: "hack", answer: "X", timeLimitSec: 3 }); // 권한 없음
-send(admin, { type: "admin_start_question", question: "지구는 둥글다?", answer: "O", timeLimitSec: 3 });
-await sleep(200);
-send(admin, { type: "admin_start_question", question: "중복", answer: "O", timeLimitSec: 3 }); // 진행 중 거부
+send(admin, { type: "admin_start_game", quizzes: [{ question: "중복", answer: "O", timeLimitSec: 3 }] }); // 진행 중 거부
 
 // question_active 진입 확인 후, reveal 시작 직후 Bob 이 O 구역으로 순간이동 시도 (무시되어야 함)
 await sleep(3000 + 3000 + 400);
@@ -63,12 +64,12 @@ const barrierOk = qa && qa.barrierRaisesAt === qa.phaseEndsAt - 1500;
 const over = display.log.findLast((m) => m.type === "game_state")?.game;
 const winnerOk = over?.phase === "game_over" && over.winnerId === alice.selfId;
 console.log(`barrierRaisesAt ok=${barrierOk}, winner=alice ${winnerOk}`);
-send(admin, { type: "admin_start_question", question: "game over 중 출제", answer: "O", timeLimitSec: 3 }); // 거부
+send(admin, { type: "admin_next_question" }); // game_over 에서는 다음 문제 불가 → 거부
 await sleep(200);
 
 send(admin, { type: "admin_reset" });
 await sleep(300);
-const reset = display.log.find((m) => m.type === "round_reset");
+const reset = display.log.findLast((m) => m.type === "round_reset");
 
 const ok =
   phases.join(",") === "countdown,question_active,reveal,elimination,game_over" &&
@@ -84,17 +85,17 @@ const carol = await connect("carol", { role: "player", name: "Carol" });
 const dave = await connect("dave", { role: "player", name: "Dave" });
 await sleep(200);
 const quad = { alice: [-5, 0.8, -5], bob: [5, 0.8, -5], carol: [-5, 0.8, 5], dave: [5, 0.8, 5] }; // A B C D
-for (const [c, p] of [[alice, quad.alice], [bob, quad.bob], [carol, quad.carol], [dave, quad.dave]]) {
-  send(c, { type: "move", p, r: 0 });
-}
-send(admin, { type: "admin_start_question", quizType: "MULTIPLE", question: "보기 누락", answer: "B", choices: ["1", "2", ""], timeLimitSec: 3 }); // 거부
-send(admin, { type: "admin_start_question", quizType: "MULTIPLE", question: "정답 X 는 4지선다에서 불가", answer: "X", choices: ["1", "2", "3", "4"], timeLimitSec: 3 }); // 거부
+const moveToQuads = () => {
+  for (const [c, p] of [[alice, quad.alice], [bob, quad.bob], [carol, quad.carol], [dave, quad.dave]]) send(c, { type: "move", p, r: 0 });
+};
+send(admin, { type: "admin_start_game", quizzes: [{ quizType: "MULTIPLE", question: "보기 누락", answer: "B", choices: ["1", "2", ""], timeLimitSec: 3 }] }); // 거부
+send(admin, { type: "admin_start_game", quizzes: [{ quizType: "MULTIPLE", question: "정답 X 는 4지선다에서 불가", answer: "X", choices: ["1", "2", "3", "4"], timeLimitSec: 3 }] }); // 거부
 await sleep(100);
 const mark = display.log.length;
-send(admin, {
-  type: "admin_start_question", quizType: "MULTIPLE", question: "태양계에서 가장 큰 행성은?",
-  answer: "B", choices: ["화성", "목성", "토성", "지구"], timeLimitSec: 3,
-});
+send(admin, { type: "admin_start_game", quizzes: [{ quizType: "MULTIPLE", question: "태양계에서 가장 큰 행성은?",
+  answer: "B", choices: ["화성", "목성", "토성", "지구"], timeLimitSec: 3 }] });
+await sleep(150);
+moveToQuads(); // 게임 시작(round_reset) 후 각자 구역으로
 await sleep(14500);
 const mLog = display.log.slice(mark);
 const mStates = mLog.filter((m) => m.type === "game_state").map((m) => m.game);

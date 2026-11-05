@@ -301,3 +301,88 @@ td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid #3b3755; }
 .avatar-cone .avatar-cheeks { top: 68%; gap: 14%; }
 /* 좁은 화면: 안내 문구 없이 아이콘만 (왼쪽 위 상태창과 겹치지 않게) */
 @media (max-width: 640px) { .sound-toggle-label { display: none; } .sound-toggle.locked { font-size: 18px; } }
+
+/* ───── Phase 9: 관리자 대시보드 ───── */
+.admin-page { max-width: 900px; }
+.card.inner { background: #1a1729; margin-top: 12px; }
+.set-count { font-size: 15px; font-weight: 600; opacity: .7; margin-left: 6px; }
+.toolbar .btn { padding: 7px 12px; font-size: 14px; }
+.btn.big { padding: 14px 22px; font-size: 18px; font-weight: 800; }
+.btn.pulse:not(:disabled) { animation: pulse 1.4s ease-in-out infinite; }
+.btn.danger, .quiz-actions .danger { color: #ff9aa5; }
+
+.game-control { position: sticky; top: 8px; z-index: 5; box-shadow: 0 8px 24px rgba(0, 0, 0, .35); }
+.game-control-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.round-progress { font-size: 16px; }
+.round-progress b { font-size: 22px; }
+.stat-row { display: flex; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
+.stat { background: #14121f; border-radius: 10px; padding: 8px 14px; display: grid; min-width: 90px; }
+.stat span { font-size: 12px; opacity: .7; }
+.stat b { font-size: 24px; }
+.stat.warn b { color: #ff9aa5; }
+.current-question { margin-top: 12px; }
+.current-question p { margin: 4px 0 8px; font-size: 17px; }
+.game-over-line { font-size: 20px; margin: 12px 0 0; }
+.control-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 14px; }
+.control-hint { font-size: 14px; opacity: .75; }
+.badge.phase-round_standings { background: #1f7a4d; }
+.badge.phase-game_over { background: #b8860b; }
+.badge.type-ox { background: #2f4f9e; }
+.badge.type-mc { background: #6b3fa0; }
+.badge.answer-badge { background: var(--zone, #3b3755); }
+.badge.answer-badge.zone-O { --zone: #4d8bff; }
+.badge.answer-badge.zone-X { --zone: #ff5c6c; }
+
+.quiz-empty { opacity: .7; padding: 12px 0; }
+.quiz-list { list-style: none; padding: 0; margin: 14px 0 0; display: grid; gap: 8px; }
+.quiz-item {
+  display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: start;
+  background: #1a1729; border: 1px solid #3b3755; border-radius: 10px; padding: 10px;
+}
+.quiz-item.invalid { border-color: #a33a4a; }
+.quiz-item.active { border-color: #6c5cff; box-shadow: 0 0 0 2px rgba(108, 92, 255, .35); }
+.quiz-item.editing { display: block; border-color: #6c5cff; }
+.quiz-num {
+  width: 30px; height: 30px; border-radius: 8px; display: grid; place-items: center;
+  background: #3b3755; font-weight: 800;
+}
+.quiz-body { min-width: 0; }
+.quiz-meta { display: flex; gap: 6px; flex-wrap: wrap; }
+.quiz-question { margin-top: 6px; font-size: 16px; word-break: keep-all; overflow-wrap: anywhere; }
+.quiz-choices { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 12px; margin-top: 6px; font-size: 13px; opacity: .85; }
+.quiz-choices span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.quiz-choices b { color: var(--zone); }
+.quiz-choices .correct { font-weight: 700; opacity: 1; }
+.quiz-actions { display: flex; gap: 4px; flex-wrap: wrap; justify-content: flex-end; max-width: 210px; }
+.quiz-actions button {
+  background: #2c2845; color: inherit; border: 0; border-radius: 6px; padding: 5px 8px; font-size: 13px; cursor: pointer;
+}
+.quiz-actions button:disabled { opacity: .35; cursor: default; }
+@media (max-width: 560px) {
+  .quiz-item { grid-template-columns: 30px 1fr; }
+  .quiz-actions { grid-column: 1 / -1; justify-content: flex-start; max-width: none; }
+}
+
+/* ───── 실시간 접속자 수 ───── */
+.player-count { display: inline-flex; align-items: baseline; gap: 10px; flex-wrap: wrap; justify-content: center; }
+.player-count-label { opacity: .8; }
+.player-count-num b { color: #7ae582; font-variant-numeric: tabular-nums; }
+.player-count.large { font-size: clamp(18px, 4vw, 24px); }
+.player-count.large .player-count-num b { font-size: clamp(40px, 11vw, 64px); line-height: 1; }
+.player-count.medium { font-size: 15px; background: #14121f; border-radius: 999px; padding: 6px 14px; }
+.player-count.medium .player-count-num b { font-size: 24px; }
+.player-count.almost .player-count-num b { color: #ffb84d; }
+.player-count.full .player-count-num b { color: #ff6b6b; }
+.player-count-full { background: #a33a4a; color: #fff; border-radius: 999px; padding: 2px 10px; font-size: 13px; font-weight: 700; }
+.standings-row { display: flex; justify-content: center; gap: 18px; margin: 6px 0; }
+.standings-row div { display: grid; }
+.standings-row b { font-size: clamp(28px, 8vw, 44px); line-height: 1.1; }
+.standings-row span { font-size: 13px; opacity: .8; }
+.standings-row .alive b { color: #7ae582; }
+.standings-row .out b { color: #ff7c8a; }
+
+.room-full {
+  min-height: 100%; display: grid; place-content: center; text-align: center; gap: 12px; padding: 24px;
+}
+.room-full h1 { margin: 0; font-size: clamp(28px, 7vw, 40px); }
+.quiz-item.done { opacity: .55; }

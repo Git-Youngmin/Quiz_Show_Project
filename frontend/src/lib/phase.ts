@@ -6,5 +6,6 @@ export const PHASE_LABEL: Record<GamePhase, string> = {
   question_active: "문제 진행 중",
   reveal: "정답 발표",
   elimination: "탈락 연출",
+  round_standings: "라운드 결과",
   game_over: "게임 종료",
 };

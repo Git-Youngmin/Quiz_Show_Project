@@ -1,6 +1,7 @@
 import type { Choices } from "@quiz/shared";
 import { useGameStore, useSelfAlive } from "../store/useGameStore";
 import { useCountdown } from "../lib/useCountdown";
+import { PlayerCount } from "./PlayerCount";
 
 /**
  * 화면 상단 퀴즈 상태 배너 (/play, /display 공용).
@@ -19,16 +20,21 @@ export function QuizBanner({ showSelfStatus = false }: { showSelfStatus?: boolea
   let content: React.ReactNode;
   switch (game.phase) {
     case "waiting":
+      // 로비: 실시간 접속자 수를 크게
       content = (
-        <div className="banner-sub">
-          {game.round === 0 ? "곧 퀴즈가 시작됩니다! 보드 위에서 기다려 주세요" : `다음 문제 대기 중 · 생존자 ${aliveCount}명`}
-        </div>
+        <>
+          <PlayerCount />
+          <div className="banner-sub">곧 퀴즈가 시작됩니다! 보드 위에서 기다려 주세요</div>
+        </>
       );
       break;
     case "countdown":
       content = (
         <>
-          <div className="banner-sub">문제 {game.round}</div>
+          <div className="banner-sub">
+            문제 {game.round}
+            {game.totalQuestions > 0 && ` / ${game.totalQuestions}`}
+          </div>
           <div className="banner-big pop" key={sec}>{sec}</div>
         </>
       );
@@ -39,7 +45,8 @@ export function QuizBanner({ showSelfStatus = false }: { showSelfStatus?: boolea
       content = (
         <>
           <div className="banner-sub">
-            문제 {game.round} · {multiple ? "정답 보기의 구역으로 이동하세요!" : "O 는 왼쪽, X 는 오른쪽!"}
+            문제 {game.round}
+            {game.totalQuestions > 0 && `/${game.totalQuestions}`} · {multiple ? "정답 보기의 구역으로 이동하세요!" : "O 는 왼쪽, X 는 오른쪽!"}
           </div>
           <div className="banner-question">{game.question}</div>
           {multiple && <ChoiceGrid choices={game.choices!} />}
@@ -74,12 +81,44 @@ export function QuizBanner({ showSelfStatus = false }: { showSelfStatus?: boolea
         </>
       );
       break;
+    case "round_standings":
+      // 라운드 결과: 생존/탈락 집계 + 관리자의 다음 문제 대기
+      content = (
+        <>
+          <div className="banner-sub">
+            문제 {game.round} / {game.totalQuestions} 결과{game.answer && ` · 정답 ${game.answer}`}
+          </div>
+          <div className="standings-row">
+            <div className="alive">
+              <b>{aliveCount}</b>
+              <span>생존</span>
+            </div>
+            <div className="out">
+              <b>{game.lastEliminatedCount}</b>
+              <span>이번 라운드 탈락</span>
+            </div>
+            <div>
+              <b>{game.totalQuestions - game.round}</b>
+              <span>남은 문제</span>
+            </div>
+          </div>
+          <div className="banner-sub">다음 문제를 기다리는 중…</div>
+        </>
+      );
+      break;
     case "game_over":
       content = winnerName ? (
         <>
           <div className="banner-sub">최후의 1인</div>
           <div className="banner-big winner">🏆 Winner: {winnerName}</div>
           {selfId && selfId === game.winnerId && <div className="banner-sub">축하합니다! 당신이 우승했어요!</div>}
+        </>
+      ) : aliveCount > 0 ? (
+        // 문제를 모두 소진했는데 여러 명이 살아남음 → 공동 우승
+        <>
+          <div className="banner-sub">모든 문제 종료!</div>
+          <div className="banner-big winner">🏆 생존자 {aliveCount}명 공동 우승</div>
+          {showSelfStatus && selfAlive && <div className="banner-sub">축하합니다! 끝까지 살아남았어요!</div>}
         </>
       ) : (
         <>

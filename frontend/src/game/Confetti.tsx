@@ -120,10 +120,26 @@ export function Confetti({ targetId }: { targetId: string }) {
 }
 
 /** game_over + 우승자가 있으면 폭죽 + 스포트라이트 */
+/**
+ * game_over 축하 연출
+ *  - 우승자 1명: 그 머리 위에서 폭죽
+ *  - 문제 소진 공동 우승: 생존자 머리 위에서 (렌더링 부하를 고려해 최대 4명)
+ */
+const MAX_CO_WINNER_CONFETTI = 4;
 export function WinnerCelebration() {
   const phase = useGameStore((s) => s.game.phase);
   const winnerId = useGameStore((s) => s.game.winnerId);
-  const winnerExists = useGameStore((s) => (winnerId ? !!s.players[winnerId] : false));
-  if (phase !== "game_over" || !winnerId || !winnerExists) return null;
-  return <Confetti key={winnerId} targetId={winnerId} />;
+  // 생존자 id 목록을 문자열로 구독 (위치 스냅샷마다 리렌더되지 않도록)
+  const aliveKey = useGameStore((s) =>
+    s.game.phase === "game_over" ? s.playerIds.filter((id) => s.players[id]?.alive).join(",") : "",
+  );
+  if (phase !== "game_over") return null;
+  const targets = winnerId ? [winnerId] : aliveKey ? aliveKey.split(",").slice(0, MAX_CO_WINNER_CONFETTI) : [];
+  return (
+    <>
+      {targets.map((id) => (
+        <Confetti key={id} targetId={id} />
+      ))}
+    </>
+  );
 }

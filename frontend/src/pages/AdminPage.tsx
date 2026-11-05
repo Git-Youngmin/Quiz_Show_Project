@@ -1,17 +1,8 @@
-import { useEffect, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import {
-  MAX_CHOICE_LENGTH,
-  MAX_QUESTION_LENGTH,
-  TIME_LIMIT_SEC,
-  type Choice,
-  type Choices,
-  type OXAnswer,
-  type QuizType,
-} from "@quiz/shared";
+import { MAX_QUIZ_ITEMS, type QuizItem } from "@quiz/shared";
 import { ConnectionStatus } from "../components/ConnectionStatus";
 import { PlayerTable } from "../components/PlayerTable";
-import { ChoiceGrid } from "../components/QuizBanner";
 import { AdminLogin } from "../components/AdminLogin";
 import {
   CLOSE_REASON,
@@ -20,12 +11,21 @@ import {
   saveAdminSession,
   type AdminSession,
 } from "../lib/adminSession";
-import { useCountdown } from "../lib/useCountdown";
-import { PHASE_LABEL } from "../lib/phase";
+import { GameControl } from "../components/admin/GameControl";
+import { QuizEditor } from "../components/admin/QuizEditor";
+import { QuizList } from "../components/admin/QuizList";
+import {
+  downloadQuizSet,
+  loadQuizSet,
+  quizProblem,
+  sampleQuizSet,
+  sanitizeQuizSet,
+  saveQuizSet,
+  toQuizItems,
+  type QuizDraft,
+} from "../lib/quizSet";
 import { useGameStore } from "../store/useGameStore";
 
-const CHOICE_LETTERS: Choice[] = ["A", "B", "C", "D"];
-const CHOICE_POS: Record<Choice, string> = { A: "좌상", B: "우상", C: "좌하", D: "우하" };
 
 /**
  * /admin — 로그인 게이트.
@@ -112,187 +112,119 @@ function AdminGate({
   return <AdminConsole roomId={session.roomId} onLogout={onLogout} />;
 }
 
-/** 방장 패널 — 문제 출제(O/X · 4지선다) / 진행 상황 / 라운드 리셋 */
+/**
+ * 방장 대시보드 — 카훗 스타일
+ *  ① 진행 패널: 접속자/생존자, [게임 시작] / [다음 문제 출제] / [게임 중단]
+ *  ② 퀴즈 세트 빌더: 최대 50문제 추가·수정·삭제·복제·순서 변경 (브라우저에 자동 저장)
+ *  ③ 참가자 목록
+ */
 function AdminConsole({ roomId, onLogout }: { roomId: string; onLogout: () => void }) {
-  const status = useGameStore((s) => s.status);
+  const [set, setSet] = useState<QuizDraft[]>(() => loadQuizSet());
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [startedSet, setStartedSet] = useState<QuizItem[] | null>(null);
   const game = useGameStore((s) => s.game);
-  const players = useGameStore((s) => s.players);
-  const remaining = useCountdown();
-  const winnerName = useGameStore((s) => (s.game.winnerId ? s.players[s.game.winnerId]?.name ?? "(퇴장함)" : null));
+  const fileInput = useRef<HTMLInputElement>(null);
 
-  const [quizType, setQuizType] = useState<QuizType>("OX");
-  const [question, setQuestion] = useState("");
-  const [oxAnswer, setOxAnswer] = useState<OXAnswer>("O");
-  const [choices, setChoices] = useState<Choices>(["", "", "", ""]);
-  const [choiceAnswer, setChoiceAnswer] = useState<Choice>("A");
-  const [timeLimit, setTimeLimit] = useState<number>(TIME_LIMIT_SEC.default);
+  // 편집할 때마다 자동 저장 (새로고침해도 유지)
+  useEffect(() => saveQuizSet(set), [set]);
 
-  const list = Object.values(players);
-  const aliveCount = list.filter((p) => p.alive).length;
-  const formValid =
-    question.trim().length > 0 && (quizType === "OX" || choices.every((c) => c.trim().length > 0));
-  const canStart = status === "open" && game.phase === "waiting" && formValid;
+  const setValid = set.every((q) => !quizProblem(q));
+  const running = game.phase !== "waiting" && game.phase !== "game_over";
+  const full = set.length >= MAX_QUIZ_ITEMS;
 
-  const submit = (e: FormEvent) => {
-    e.preventDefault();
-    if (!canStart) return;
-    const base = { question: question.trim(), timeLimitSec: timeLimit };
-    useGameStore.getState().startQuestion(
-      quizType === "OX"
-        ? { quizType: "OX", answer: oxAnswer, ...base }
-        : { quizType: "MULTIPLE", answer: choiceAnswer, choices: choices.map((c) => c.trim()) as Choices, ...base },
-    );
-    setQuestion("");
-    setChoices(["", "", "", ""]);
+  const start = () => {
+    const items = toQuizItems(set);
+    setStartedSet(items);
+    setEditingId(null);
+    useGameStore.getState().startGame(items);
+  };
+
+  const importFile = async (file: File) => {
+    try {
+      const imported = sanitizeQuizSet(JSON.parse(await file.text()));
+      if (imported.length === 0) return alert("불러올 문제가 없습니다. 퀴즈 세트 JSON 파일인지 확인해 주세요.");
+      if (set.length === 0 || confirm(`현재 ${set.length}문제를 불러온 ${imported.length}문제로 바꿀까요?`)) setSet(imported);
+    } catch {
+      alert("JSON 파일을 읽을 수 없습니다.");
+    }
   };
 
   return (
-    <div className="page">
+    <div className="page admin-page">
       <div className="row" style={{ justifyContent: "space-between" }}>
-        <h1>관리자 패널</h1>
+        <h1>관리자 대시보드</h1>
         <button className="btn secondary" type="button" onClick={onLogout}>
           로그아웃
         </button>
       </div>
       <ConnectionStatus />
 
-      {/* ── 진행 상황 ── */}
-      <div className="card">
+      <GameControl setSize={set.length} setValid={setValid} startedSet={startedSet} onStart={start} />
+
+      {/* ── 퀴즈 세트 빌더 ── */}
+      <section className="card">
         <div className="row" style={{ justifyContent: "space-between" }}>
-          <div className="row">
-            <span className={`badge phase-${game.phase}`}>{PHASE_LABEL[game.phase]}</span>
-            <span>문제 {game.round}</span>
-            <span className="badge">{game.quizType === "OX" ? "O/X" : "4지선다"}</span>
-            {remaining !== null && <b className="mono">{(remaining / 1000).toFixed(1)}s</b>}
+          <h2 style={{ margin: 0 }}>
+            퀴즈 세트 <span className="set-count">{set.length} / {MAX_QUIZ_ITEMS}</span>
+          </h2>
+          <div className="row toolbar">
+            {set.length === 0 && (
+              <button className="btn secondary" type="button" onClick={() => setSet(sampleQuizSet())}>
+                예시 세트 불러오기
+              </button>
+            )}
+            <button className="btn secondary" type="button" onClick={() => fileInput.current?.click()}>
+              JSON 불러오기
+            </button>
+            <button className="btn secondary" type="button" disabled={set.length === 0} onClick={() => downloadQuizSet(set)}>
+              JSON 내보내기
+            </button>
+            <button
+              className="btn secondary"
+              type="button"
+              disabled={set.length === 0}
+              onClick={() => confirm("모든 문제를 지울까요?") && setSet([])}
+            >
+              전체 삭제
+            </button>
+            <input
+              ref={fileInput}
+              type="file"
+              accept="application/json,.json"
+              hidden
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void importFile(f);
+                e.target.value = "";
+              }}
+            />
           </div>
-          <span>생존 {aliveCount} / {list.length}명</span>
         </div>
-        {game.phase === "game_over" && (
-          <p style={{ marginBottom: 0, fontSize: 20 }}>
-            🏆 {winnerName ? <>우승자: <b>{winnerName}</b></> : "우승자 없음 (전원 탈락)"} — 새 게임은 라운드 리셋 후 시작하세요.
+        {running && (
+          <p className="admin-hint" style={{ marginTop: 8 }}>
+            게임 진행 중에 세트를 고쳐도 지금 게임에는 반영되지 않아요 (시작할 때 보낸 문제로 진행).
           </p>
         )}
-        {game.question && game.phase !== "game_over" && (
-          <>
-            <p style={{ marginBottom: 8 }}>
-              Q. {game.question}
-              {game.answer && <b> → 정답 {game.answer}</b>}
-            </p>
-            {game.choices && <ChoiceGrid choices={game.choices} answer={game.answer} />}
-          </>
-        )}
-      </div>
 
-      {/* ── 출제 폼 ── */}
-      <form className="card" onSubmit={submit}>
-        <div className="row" style={{ justifyContent: "space-between", marginBottom: 12 }}>
-          <h3 style={{ margin: 0 }}>문제 출제</h3>
-          <div className="segmented" role="tablist">
-            {(["OX", "MULTIPLE"] as const).map((t) => (
-              <button
-                key={t}
-                type="button"
-                role="tab"
-                aria-selected={quizType === t}
-                className={quizType === t ? "selected" : ""}
-                onClick={() => setQuizType(t)}
-              >
-                {t === "OX" ? "O / X" : "4지선다"}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        <textarea
-          className="input"
-          style={{ width: "100%", minHeight: 72, resize: "vertical" }}
-          placeholder={quizType === "OX" ? "예) 바나나는 나무에서 자란다?" : "예) 태양계에서 가장 큰 행성은?"}
-          value={question}
-          maxLength={MAX_QUESTION_LENGTH}
-          onChange={(e) => setQuestion(e.target.value)}
+        <QuizList
+          set={set}
+          onChange={setSet}
+          editingId={editingId}
+          setEditingId={setEditingId}
+          activeRound={running && startedSet ? game.round : 0}
+          standings={game.phase === "round_standings"}
         />
 
-        {quizType === "OX" ? (
-          <div className="row" style={{ marginTop: 12 }}>
-            <span>정답</span>
-            {(["O", "X"] as const).map((a) => (
-              <button
-                key={a}
-                type="button"
-                className={`answer-toggle ${a} ${oxAnswer === a ? "selected" : ""}`}
-                onClick={() => setOxAnswer(a)}
-              >
-                {a}
-              </button>
-            ))}
-          </div>
+        {full ? (
+          <p className="admin-hint">문제는 최대 {MAX_QUIZ_ITEMS}개까지 만들 수 있어요.</p>
         ) : (
-          <div className="choice-inputs">
-            <small>보기를 입력하고 정답 버튼을 눌러 선택하세요. 보드 구역: A 좌상 · B 우상 · C 좌하 · D 우하</small>
-            {CHOICE_LETTERS.map((letter, i) => (
-              <div key={letter} className={`choice-input-row ${choiceAnswer === letter ? "is-answer" : ""}`}>
-                <button
-                  type="button"
-                  className={`choice-letter zone-${letter}`}
-                  aria-pressed={choiceAnswer === letter}
-                  title={`${letter}를 정답으로`}
-                  onClick={() => setChoiceAnswer(letter)}
-                >
-                  {letter}
-                </button>
-                <input
-                  className="input"
-                  placeholder={`보기 ${letter} (${CHOICE_POS[letter]})`}
-                  value={choices[i]}
-                  maxLength={MAX_CHOICE_LENGTH}
-                  onChange={(e) => {
-                    const next = [...choices] as Choices;
-                    next[i] = e.target.value;
-                    setChoices(next);
-                  }}
-                />
-                {choiceAnswer === letter && <span className="answer-tag">정답</span>}
-              </div>
-            ))}
+          <div className="card inner">
+            <QuizEditor onSave={(q) => setSet([...set, q])} />
           </div>
         )}
+      </section>
 
-        <div className="row" style={{ marginTop: 12 }}>
-          <label className="row">
-            제한 시간
-            <input
-              className="input"
-              type="number"
-              min={TIME_LIMIT_SEC.min}
-              max={TIME_LIMIT_SEC.max}
-              value={timeLimit}
-              onChange={(e) => setTimeLimit(Number(e.target.value))}
-              style={{ width: 80 }}
-            />
-            초
-          </label>
-        </div>
-        <div className="row" style={{ marginTop: 12 }}>
-          <button className="btn" type="submit" disabled={!canStart}>
-            출제하기
-          </button>
-          <button
-            className="btn secondary"
-            type="button"
-            disabled={status !== "open"}
-            onClick={() => {
-              if (confirm("진행 중인 문제를 중단하고 전원 부활시킬까요?")) {
-                useGameStore.getState().resetRound();
-              }
-            }}
-          >
-            라운드 리셋 (전원 부활)
-          </button>
-          {game.phase !== "waiting" && game.phase !== "game_over" && <span>문제 진행이 끝나면 다음 문제를 낼 수 있어요.</span>}
-        </div>
-      </form>
-
-      <div className="card">
+      <section className="card">
         <h3 style={{ marginTop: 0 }}>참가자</h3>
         <PlayerTable />
         <p className="mono" style={{ opacity: 0.7 }}>
@@ -300,7 +232,7 @@ function AdminConsole({ roomId, onLogout }: { roomId: string; onLogout: () => vo
           <br />
           송출 화면: {location.origin}/display?room={roomId}
         </p>
-      </div>
+      </section>
     </div>
   );
 }

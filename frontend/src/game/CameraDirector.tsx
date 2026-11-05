@@ -14,6 +14,7 @@ import { zonesCenter } from "./zones";
  *  question_active  : 보드 정면에서 좌우로 천천히 흔들리는 미디엄 샷
  *  reveal           : 생존자 무리를 낮은 앵글로 클로즈업하며 회전 + 긴장감 흔들림
  *  elimination      : ① 꺼지는 구역을 내려다보며 추락 추적 → ② 생존자 클로즈업
+ *  round_standings  : 살아남은 플레이어들을 가까이서 천천히 도는 샷
  *  game_over        : 우승자에게 극적으로 줌인하며 천천히 회전
  *
  * 목표값(desired)을 계산한 뒤 지수 보간으로 부드럽게 따라가므로 단계가 바뀌어도 컷이 튀지 않는다.
@@ -133,6 +134,16 @@ function planShot(
       shot.look.set(0, 0, 0);
       shot.fov = 45;
       shot.speed = 1.2;
+      break;
+    }
+    case "round_standings": {
+      // 생존자 무리를 중간 거리에서 천천히 회전
+      const dist = Math.max(10, Math.min(20, spread * 1.3 + 10));
+      const a = 0.4 + t * 0.12;
+      shot.pos.set(centroid.x + Math.sin(a) * dist, 4 + dist * 0.35, centroid.z + Math.cos(a) * dist);
+      shot.look.copy(survivors > 0 ? centroid : shot.look.set(0, 0, 0));
+      shot.fov = 40;
+      shot.speed = 1.5;
       break;
     }
     case "waiting": {

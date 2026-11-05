@@ -1,5 +1,6 @@
 import { Suspense, useMemo } from "react";
-import { Navigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useSearchParams } from "react-router-dom";
+import { CLOSE_CODE, MAX_PLAYERS_PER_ROOM } from "@quiz/shared";
 import { Canvas } from "@react-three/fiber";
 import { KeyboardControls } from "@react-three/drei";
 import { Physics } from "@react-three/rapier";
@@ -31,6 +32,10 @@ function PlayScene() {
   useGameAudio("play");
   const showJoystick = useMemo(shouldShowJoystick, []);
   const alive = useSelfAlive();
+  const fatal = useGameStore((s) => s.fatalCloseCode);
+
+  // 정원(100명) 초과로 서버가 4009 로 끊은 경우
+  if (fatal === CLOSE_CODE.ROOM_FULL) return <RoomFull />;
 
   return (
     <KeyboardControls map={KEYBOARD_MAP}>
@@ -97,6 +102,29 @@ function PlayHud() {
           </span>
         )}
         <span>참가자 {count}명</span>
+      </div>
+    </div>
+  );
+}
+
+function RoomFull() {
+  const [params] = useSearchParams();
+  return (
+    <div className="room-full">
+      <div style={{ fontSize: 56 }}>🚪</div>
+      <h1>방이 가득 찼어요</h1>
+      <p>
+        이 방은 최대 {MAX_PLAYERS_PER_ROOM}명까지 참가할 수 있어요.
+        <br />
+        자리가 나면 다시 시도하거나 다른 방 코드로 입장해 주세요.
+      </p>
+      <div className="row" style={{ justifyContent: "center" }}>
+        <button className="btn" type="button" onClick={() => location.reload()}>
+          다시 시도
+        </button>
+        <Link className="btn secondary" to={`/?${new URLSearchParams({ room: params.get("room") || "lobby" })}`}>
+          로비로
+        </Link>
       </div>
     </div>
   );

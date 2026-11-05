@@ -236,8 +236,14 @@ server.on("upgrade", (req, socket, head) => {
   }
 
   const room = getRoom(roomId);
-  const denied = room.canJoin(url.searchParams);
-  if (denied) return reject(denied.code, denied.message);
+  if (!room.isValidRole(url.searchParams)) return reject(400, "Bad Request");
+
+  // 정원 초과: 연결을 받은 뒤 4009 로 닫아 클라이언트가 "방이 가득 찼습니다" 를 표시할 수 있게
+  const role = url.searchParams.get("role") ?? "player";
+  if (role === "player" && room.isFull()) {
+    wss.handleUpgrade(req, socket, head, (ws) => ws.close(CLOSE_CODE.ROOM_FULL, "room full"));
+    return;
+  }
 
   wss.handleUpgrade(req, socket, head, (ws) => {
     markAlive(ws);
