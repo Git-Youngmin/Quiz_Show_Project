@@ -4,7 +4,8 @@ import { KeyboardControls } from "@react-three/drei";
 import { Physics } from "@react-three/rapier";
 import { ConnectionStatus } from "../components/ConnectionStatus";
 import { useRoomConnection } from "../lib/useRoomConnection";
-import { useGameStore, useSelf } from "../store/useGameStore";
+import { useGameStore, useSelf, useSelfAlive } from "../store/useGameStore";
+import { QuizBanner } from "../components/QuizBanner";
 import { KEYBOARD_MAP } from "../game/input/controls";
 import { VirtualJoystick, shouldShowJoystick } from "../game/input/VirtualJoystick";
 import { World } from "../game/World";
@@ -16,6 +17,7 @@ import { CAMERA_OFFSET } from "../game/constants";
 export default function PlayPage() {
   useRoomConnection("player");
   const showJoystick = useMemo(shouldShowJoystick, []);
+  const alive = useSelfAlive();
 
   return (
     <KeyboardControls map={KEYBOARD_MAP}>
@@ -31,11 +33,13 @@ export default function PlayPage() {
         </Canvas>
 
         <PlayHud />
-        {showJoystick ? (
-          <VirtualJoystick />
-        ) : (
-          <div className="hint">WASD / 방향키 이동 · Space 점프</div>
-        )}
+        <QuizBanner showSelfStatus />
+        {alive &&
+          (showJoystick ? (
+            <VirtualJoystick />
+          ) : (
+            <div className="hint">WASD / 방향키 이동 · Space 점프</div>
+          ))}
       </div>
     </KeyboardControls>
   );
@@ -44,14 +48,25 @@ export default function PlayPage() {
 /** welcome 을 받아 selfId 가 생기면 서버가 정한 스폰 위치에 내 캐릭터 생성 */
 function SelfPlayer() {
   const selfId = useGameStore((s) => s.selfId);
-  // 스폰 정보는 접속 시점 1회만 사용 (이후 위치는 로컬 물리엔진이 결정)
+  const spawnVersion = useGameStore((s) => s.spawnVersion);
+  const alive = useSelfAlive();
+  // 스폰 정보는 접속/라운드 리셋 시점에만 사용 (이후 위치는 로컬 물리엔진이 결정)
   const spawn = useMemo(
     () => (selfId ? useGameStore.getState().players[selfId] : undefined),
-    [selfId],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [selfId, spawnVersion],
   );
   if (!selfId || !spawn) return null;
-  // 재접속으로 selfId 가 바뀌면 key 변경 → 새 위치에서 다시 생성
-  return <LocalPlayer key={selfId} spawn={spawn.p} color={spawn.color} name={spawn.name} />;
+  // 재접속(selfId 변경) 또는 라운드 리셋(spawnVersion 증가) → key 변경으로 새 위치에 재생성
+  return (
+    <LocalPlayer
+      key={`${selfId}:${spawnVersion}`}
+      spawn={spawn.p}
+      color={spawn.color}
+      name={spawn.name}
+      alive={alive}
+    />
+  );
 }
 
 function PlayHud() {

@@ -1,6 +1,6 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
-import { CapsuleCollider, RigidBody, type RapierRigidBody } from "@react-three/rapier";
+import { CapsuleCollider, RigidBody, type RapierCollider, type RapierRigidBody } from "@react-three/rapier";
 import { Vector3, type Group } from "three";
 import { useGameStore } from "../store/useGameStore";
 import { Character } from "./Character";
@@ -38,6 +38,13 @@ function RemotePlayer({ id }: { id: string }) {
   // 이름/색은 바뀌지 않으므로 원시값만 구독 (위치 변경으로는 리렌더 X)
   const name = useGameStore((s) => s.players[id]?.name ?? "");
   const color = useGameStore((s) => s.players[id]?.color ?? "#ccc");
+  const alive = useGameStore((s) => s.players[id]?.alive ?? true);
+  const collider = useRef<RapierCollider>(null);
+
+  // 탈락한 플레이어는 충돌하지 않음 (떨어지는 중 생존자를 밀지 않도록)
+  useEffect(() => {
+    collider.current?.setSensor(!alive);
+  }, [alive]);
 
   const body = useRef<RapierRigidBody>(null);
   const visual = useRef<Group>(null);
@@ -67,7 +74,7 @@ function RemotePlayer({ id }: { id: string }) {
 
   return (
     <RigidBody ref={body} type="kinematicPosition" colliders={false} position={initial}>
-      <CapsuleCollider args={[CAPSULE_HALF_HEIGHT, CAPSULE_RADIUS]} />
+      <CapsuleCollider ref={collider} args={[CAPSULE_HALF_HEIGHT, CAPSULE_RADIUS]} />
       <group ref={visual}>
         <Character color={color} name={name} />
       </group>

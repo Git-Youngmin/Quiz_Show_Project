@@ -11,15 +11,16 @@ export function PlayerTable() {
   return (
     <table className="mono">
       <thead>
-        <tr><th>이름</th><th>x</th><th>y</th><th>z</th><th>rotY</th></tr>
+        <tr><th>이름</th><th>상태</th><th>x</th><th>y</th><th>z</th><th>rotY</th></tr>
       </thead>
       <tbody>
         {list.map((p) => (
-          <tr key={p.id}>
+          <tr key={p.id} style={{ opacity: p.alive ? 1 : 0.45 }}>
             <td>
               <span style={{ color: p.color }}>●</span> {p.name}
               {p.id === selfId && " (나)"}
             </td>
+            <td>{p.alive ? "생존" : "탈락"}</td>
             {p.p.map((v, i) => <td key={i}>{v.toFixed(2)}</td>)}
             <td>{p.r.toFixed(2)}</td>
           </tr>

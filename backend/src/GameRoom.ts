@@ -2,22 +2,30 @@
  * GameRoom Durable Object — 방(Room) 하나 = 인스턴스 하나.
  *
  * 설계 포인트
- * 1. WebSocket Hibernation API 사용 (ctx.acceptWebSocket)
- *    - 메시지가 없으면 DO 가 메모리에서 내려가도(hibernate) 연결은 유지되고 과금되지 않음.
- *    - 깨어나면 메모리 상태가 사라지므로, 소켓별 상태는 serializeAttachment 에 보관하고
- *      생성자에서 ctx.getWebSockets() 로 복원한다.
- * 2. 위치 브로드캐스트는 "배치 스냅샷" 방식
- *    - move 메시지를 받을 때마다 즉시 N명에게 중계하면 O(N²) 메시지가 발생.
- *    - 대신 변경된(dirty) 플레이어만 모아 SNAPSHOT_INTERVAL_MS 마다 한 번에 전송.
- *    - 움직임이 없으면 타이머도 돌지 않아 hibernation 을 방해하지 않음.
+ * 1. WebSocket Hibernation API (ctx.acceptWebSocket)
+ *    - 메시지가 없으면 DO 가 메모리에서 내려가도(hibernate) 연결은 유지됨.
+ *    - 소켓별 상태는 serializeAttachment 에, 게임 상태는 ctx.storage 에 보관하고
+ *      생성자에서 복원한다.
+ * 2. 위치 브로드캐스트는 "배치 스냅샷" (dirty 플레이어만 SNAPSHOT_INTERVAL_MS 마다)
+ * 3. 게임 진행 타이머는 setTimeout 이 아닌 **Alarm API** 사용
+ *    - 알람은 storage 에 영속되므로 hibernation/재시작 후에도 반드시 실행됨.
+ *    - 단계 전환: waiting → countdown → question_active → reveal → elimination → waiting
  */
 import { DurableObject } from "cloudflare:workers";
 import {
+  FELL_Y,
+  INITIAL_GAME_STATE,
   MAX_NAME_LENGTH,
   MAX_PLAYERS_PER_ROOM,
+  MAX_QUESTION_LENGTH,
+  PHASE_DURATION_MS,
   SNAPSHOT_INTERVAL_MS,
+  TIME_LIMIT_SEC,
   WORLD_BOUNDS,
+  zoneOfX,
+  type Answer,
   type ClientMessage,
+  type GameState,
   type PlayerInfo,
   type PlayerState,
   type Role,
@@ -34,11 +42,19 @@ interface SocketAttachment {
   player?: PlayerInfo;
 }
 
+/** storage 에 저장하는 게임 상태 (공개 상태 + 비공개 정답) */
+interface StoredGame {
+  public: GameState;
+  /** 출제된 정답 — reveal 전까지 클라이언트에 보내지 않음 */
+  secretAnswer: Answer | null;
+}
+
 const COLORS = [
   "#ff5c8a", "#ffb84d", "#ffe14d", "#7ae582", "#4dd9ff",
   "#6c8cff", "#b07cff", "#ff7ce0", "#ff8a5c", "#5cffc8",
 ];
 const SPAWN_RADIUS = 6;
+const GAME_KEY = "game";
 
 export class GameRoom extends DurableObject<Env> {
   private roomId = "unknown";
@@ -47,6 +63,9 @@ export class GameRoom extends DurableObject<Env> {
   /** 다음 스냅샷에 포함할 플레이어 id */
   private dirty = new Set<string>();
   private flushTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private game: GameState = { ...INITIAL_GAME_STATE };
+  private secretAnswer: Answer | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -57,13 +76,17 @@ export class GameRoom extends DurableObject<Env> {
       if (att) this.sessions.set(ws, att);
     }
 
-    // 클라이언트 ping 에 DO 를 깨우지 않고 자동 응답 (연결 유지용)
     this.ctx.setWebSocketAutoResponse(
       new WebSocketRequestResponsePair("__ping__", "__pong__"),
     );
 
     this.ctx.blockConcurrencyWhile(async () => {
       this.roomId = (await this.ctx.storage.get<string>("roomId")) ?? "unknown";
+      const stored = await this.ctx.storage.get<StoredGame>(GAME_KEY);
+      if (stored) {
+        this.game = stored.public;
+        this.secretAnswer = stored.secretAnswer;
+      }
     });
   }
 
@@ -96,26 +119,27 @@ export class GameRoom extends DurableObject<Env> {
         id,
         name: sanitizeName(url.searchParams.get("name")),
         color: COLORS[this.playerCount() % COLORS.length],
+        // 문제 진행 중 난입한 플레이어는 관전으로 시작
+        alive: this.game.phase === "waiting",
         p: randomSpawn(),
         r: 0,
       };
     }
 
-    // tags 로 역할별 소켓 조회 가능 (ctx.getWebSockets("display") 등)
     this.ctx.acceptWebSocket(server, [role, id]);
     server.serializeAttachment(attachment);
     this.sessions.set(server, attachment);
 
-    // 1) 본인에게 현재 방 상태 전달
     this.send(server, {
       type: "welcome",
       roomId: this.roomId,
       selfId: id,
       role,
       players: this.playerList(),
+      game: this.game,
+      serverTime: Date.now(),
     });
 
-    // 2) 다른 모든 클라이언트에게 신규 플레이어 알림
     if (attachment.player) {
       this.broadcast({ type: "player_joined", player: attachment.player }, server);
     }
@@ -145,16 +169,36 @@ export class GameRoom extends DurableObject<Env> {
           return;
         }
         const p = sanitizeVec3(msg.p);
-        if (!p || !Number.isFinite(msg.r)) return; // 비정상 값은 조용히 무시
+        if (!p || !Number.isFinite(msg.r)) return;
         player.p = p;
         player.r = msg.r;
         this.dirty.add(player.id);
         this.scheduleFlush();
         break;
       }
+
       case "ping":
         this.send(ws, { type: "pong", t: msg.t, serverTime: Date.now() });
         break;
+
+      case "fell": {
+        // 대기 중 낙사는 클라이언트가 리스폰 처리 → 탈락 아님
+        if (session.player?.alive && this.game.phase !== "waiting") {
+          this.eliminate([session.player.id]);
+        }
+        break;
+      }
+
+      case "admin_start_question":
+        if (!this.requireAdmin(ws, session)) return;
+        await this.startQuestion(ws, msg.question, msg.answer, msg.timeLimitSec);
+        break;
+
+      case "admin_reset":
+        if (!this.requireAdmin(ws, session)) return;
+        await this.resetRound();
+        break;
+
       default:
         this.send(ws, { type: "error", message: "Unknown message type" });
     }
@@ -171,6 +215,142 @@ export class GameRoom extends DurableObject<Env> {
 
   async webSocketError(ws: WebSocket, _error: unknown): Promise<void> {
     this.removeSession(ws);
+  }
+
+  // ───────────── 게임 진행 (관리자 명령) ─────────────
+
+  private requireAdmin(ws: WebSocket, session: SocketAttachment): boolean {
+    if (session.role === "admin") return true;
+    this.send(ws, { type: "error", message: "Admin only" });
+    return false;
+  }
+
+  private async startQuestion(ws: WebSocket, rawQuestion: unknown, answer: unknown, timeLimit: unknown) {
+    if (this.game.phase !== "waiting") {
+      this.send(ws, { type: "error", message: "이미 문제가 진행 중입니다" });
+      return;
+    }
+    const question = typeof rawQuestion === "string" ? rawQuestion.trim().slice(0, MAX_QUESTION_LENGTH) : "";
+    if (!question) {
+      this.send(ws, { type: "error", message: "질문을 입력하세요" });
+      return;
+    }
+    if (answer !== "O" && answer !== "X") {
+      this.send(ws, { type: "error", message: "정답은 O 또는 X 여야 합니다" });
+      return;
+    }
+    const sec = Number.isFinite(timeLimit) ? Number(timeLimit) : TIME_LIMIT_SEC.default;
+
+    this.secretAnswer = answer;
+    await this.setPhase({
+      phase: "countdown",
+      round: this.game.round + 1,
+      question,
+      answer: null,
+      droppedZone: null,
+      timeLimitSec: Math.round(Math.max(TIME_LIMIT_SEC.min, Math.min(TIME_LIMIT_SEC.max, sec))),
+    }, PHASE_DURATION_MS.countdown);
+  }
+
+  /** 진행 중단 + 전원 부활 + 새 스폰 위치 배정 */
+  private async resetRound() {
+    await this.ctx.storage.deleteAlarm();
+    this.secretAnswer = null;
+
+    for (const [ws, s] of this.sessions) {
+      if (!s.player) continue;
+      s.player.alive = true;
+      s.player.p = randomSpawn();
+      s.player.r = 0;
+      ws.serializeAttachment(s);
+    }
+    this.dirty.clear();
+    this.broadcast({ type: "round_reset", players: this.playerList() });
+
+    await this.setPhase({
+      ...INITIAL_GAME_STATE,
+      round: this.game.round,
+    }, null);
+  }
+
+  // ───────────── 단계 전환 (Alarm) ─────────────
+
+  /** 알람이 울리면 현재 단계에 따라 다음 단계로 진행 */
+  async alarm(): Promise<void> {
+    const now = Date.now();
+    // 리셋 직후 등 예정 시각 전에 울린 경우 방어
+    if (this.game.phaseEndsAt === null) return;
+    if (now + 20 < this.game.phaseEndsAt) {
+      await this.ctx.storage.setAlarm(this.game.phaseEndsAt);
+      return;
+    }
+
+    switch (this.game.phase) {
+      case "countdown":
+        await this.setPhase({ phase: "question_active" }, this.game.timeLimitSec * 1000);
+        break;
+
+      case "question_active":
+        // 시간 종료 → 정답 공개
+        await this.setPhase({ phase: "reveal", answer: this.secretAnswer }, PHASE_DURATION_MS.reveal);
+        break;
+
+      case "reveal": {
+        // 오답 구역 판별 → 해당 구역 플레이어 탈락 + 바닥 꺼짐
+        const answer = this.secretAnswer ?? "O";
+        const wrongZone: Answer = answer === "O" ? "X" : "O";
+        const losers: string[] = [];
+        for (const s of this.sessions.values()) {
+          const pl = s.player;
+          if (!pl?.alive) continue;
+          // 서버가 마지막으로 받은 위치로 판정 (보고 누락/조작 대비)
+          if (zoneOfX(pl.p[0]) === wrongZone || pl.p[1] < FELL_Y) losers.push(pl.id);
+        }
+        // 상태를 먼저 보내 바닥 꺼짐 연출이 시작되게 한 뒤 탈락자 통보
+        await this.setPhase({ phase: "elimination", droppedZone: wrongZone }, PHASE_DURATION_MS.elimination);
+        this.eliminate(losers);
+        break;
+      }
+
+      case "elimination":
+        // 바닥 복구 → 다음 문제 대기 (생존자 유지)
+        this.secretAnswer = null;
+        await this.setPhase({ phase: "waiting", question: null, answer: null, droppedZone: null }, null);
+        break;
+
+      case "waiting":
+        break;
+    }
+  }
+
+  /**
+   * 게임 상태 변경 + 저장 + 알람 예약 + 전체 브로드캐스트
+   * @param durationMs 이 단계의 지속 시간. null 이면 알람 없음(무기한)
+   */
+  private async setPhase(patch: Partial<GameState>, durationMs: number | null) {
+    const phaseEndsAt = durationMs === null ? null : Date.now() + durationMs;
+    this.game = { ...this.game, ...patch, phaseEndsAt };
+
+    await this.ctx.storage.put<StoredGame>(GAME_KEY, {
+      public: this.game,
+      secretAnswer: this.secretAnswer,
+    });
+    if (phaseEndsAt === null) await this.ctx.storage.deleteAlarm();
+    else await this.ctx.storage.setAlarm(phaseEndsAt);
+
+    this.broadcast({ type: "game_state", game: this.game, serverTime: Date.now() });
+  }
+
+  private eliminate(ids: string[]) {
+    const out: string[] = [];
+    for (const [ws, s] of this.sessions) {
+      if (s.player?.alive && ids.includes(s.player.id)) {
+        s.player.alive = false;
+        ws.serializeAttachment(s);
+        out.push(s.player.id);
+      }
+    }
+    if (out.length > 0) this.broadcast({ type: "players_eliminated", ids: out });
   }
 
   // ───────────── 스냅샷 배치 브로드캐스트 ─────────────
@@ -191,7 +371,6 @@ export class GameRoom extends DurableObject<Env> {
       const pl = session.player;
       if (!pl || !this.dirty.has(pl.id)) continue;
       players.push({ id: pl.id, p: pl.p, r: pl.r });
-      // 최신 위치를 attachment 에 저장 → hibernation 후에도 마지막 위치 유지
       ws.serializeAttachment(session);
     }
     this.dirty.clear();

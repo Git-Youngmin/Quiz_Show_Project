@@ -14,8 +14,11 @@
  */
 import { create } from "zustand";
 import {
+  INITIAL_GAME_STATE,
   wsPath,
+  type Answer,
   type ClientMessage,
+  type GameState,
   type PlayerInfo,
   type Role,
   type ServerMessage,
@@ -36,7 +39,7 @@ interface ConnectOptions {
   name?: string;
 }
 
-interface GameState {
+interface StoreState {
   // ── 연결 상태 ──
   status: ConnectionStatus;
   roomId: string | null;
@@ -44,17 +47,30 @@ interface GameState {
   selfId: string | null;
   /** 왕복 지연(ms) */
   latency: number | null;
+  /** 서버 시계 - 로컬 시계 (ms). 남은 시간 계산에 사용 → serverNow() */
+  clockOffset: number;
   lastError: string | null;
 
   // ── 월드 상태 ──
   playerIds: string[];
   players: Record<string, ClientPlayer>;
 
+  // ── 게임(퀴즈) 상태 ──
+  game: GameState;
+  /** round_reset 마다 증가 → 내 캐릭터를 새 스폰 위치에 재생성하는 key 로 사용 */
+  spawnVersion: number;
+
   // ── 액션 ──
   connect: (opts: ConnectOptions) => void;
   disconnect: () => void;
   /** 내 캐릭터 위치 전송. 매 프레임 호출해도 내부에서 20Hz 로 스로틀링됨 */
   sendMove: (x: number, y: number, z: number, rotY?: number) => void;
+  /** 플레이어: 맵 밖으로 떨어졌음을 서버에 보고 (진행 중이면 탈락) */
+  reportFell: () => void;
+  /** 관리자: 문제 출제 */
+  startQuestion: (question: string, answer: Answer, timeLimitSec: number) => void;
+  /** 관리자: 진행 중단 + 전원 부활 */
+  resetRound: () => void;
 }
 
 // ───────────── 모듈 스코프 (React state 가 아닌 연결 객체) ─────────────
@@ -106,7 +122,7 @@ function toClientPlayer(p: PlayerInfo): ClientPlayer {
 
 // ───────────── Store ─────────────
 
-export const useGameStore = create<GameState>()((set, get) => {
+export const useGameStore = create<StoreState>()((set, get) => {
   /** 서버 메시지 → 상태 반영 */
   function handleMessage(msg: ServerMessage) {
     switch (msg.type) {
@@ -119,7 +135,32 @@ export const useGameStore = create<GameState>()((set, get) => {
           role: msg.role,
           players,
           playerIds: Object.keys(players),
+          game: msg.game,
+          clockOffset: msg.serverTime - Date.now(), // pong 수신 시 지연 보정값으로 갱신
           lastError: null,
+        });
+        break;
+      }
+
+      case "game_state":
+        set({ game: msg.game });
+        break;
+
+      case "players_eliminated": {
+        const next = { ...get().players };
+        for (const id of msg.ids) if (next[id]) next[id] = { ...next[id], alive: false };
+        set({ players: next });
+        break;
+      }
+
+      case "round_reset": {
+        const players: Record<string, ClientPlayer> = {};
+        for (const p of msg.players) players[p.id] = toClientPlayer(p);
+        lastSent = null;
+        set({
+          players,
+          playerIds: Object.keys(players),
+          spawnVersion: get().spawnVersion + 1,
         });
         break;
       }
@@ -161,9 +202,13 @@ export const useGameStore = create<GameState>()((set, get) => {
         break;
       }
 
-      case "pong":
-        set({ latency: Date.now() - msg.t });
+      case "pong": {
+        const now = Date.now();
+        const latency = now - msg.t;
+        // 서버가 응답한 시점 ≈ 왕복의 중간
+        set({ latency, clockOffset: msg.serverTime + latency / 2 - now });
         break;
+      }
 
       case "error":
         console.warn("[ws] server error:", msg.message);
@@ -205,7 +250,7 @@ export const useGameStore = create<GameState>()((set, get) => {
       if (socket !== ws) return; // 이미 교체된 옛 소켓
       socket = null;
       clearTimers();
-      set({ status: "closed", selfId: null, players: {}, playerIds: [] });
+      set({ status: "closed", selfId: null, players: {}, playerIds: [], game: INITIAL_GAME_STATE });
 
       if (manualClose) return;
       // 지수 백오프 재연결: 0.5s, 1s, 2s, 4s ... 최대 10s
@@ -248,9 +293,12 @@ export const useGameStore = create<GameState>()((set, get) => {
     role: null,
     selfId: null,
     latency: null,
+    clockOffset: 0,
     lastError: null,
     playerIds: [],
     players: {},
+    game: INITIAL_GAME_STATE,
+    spawnVersion: 0,
 
     connect: (opts) => {
       // 같은 방/역할로 이미 연결(중)이면 무시 — StrictMode 이중 effect 대비
@@ -284,8 +332,23 @@ export const useGameStore = create<GameState>()((set, get) => {
         players: {},
         playerIds: [],
         latency: null,
+        game: INITIAL_GAME_STATE,
       });
     },
+
+    reportFell: () => {
+      const { selfId, players } = get();
+      const me = selfId ? players[selfId] : undefined;
+      if (!me?.alive) return; // 중복 보고 방지
+      // 낙관적 업데이트: 서버 확인 전에 바로 조작 차단
+      set({ players: { ...players, [me.id]: { ...me, alive: false } } });
+      rawSend({ type: "fell" });
+    },
+
+    startQuestion: (question, answer, timeLimitSec) =>
+      rawSend({ type: "admin_start_question", question, answer, timeLimitSec }),
+
+    resetRound: () => rawSend({ type: "admin_reset" }),
 
     sendMove: (x, y, z, rotY = 0) => {
       const { selfId, role } = get();
@@ -321,6 +384,13 @@ export const useGameStore = create<GameState>()((set, get) => {
 /** 내 플레이어 정보 (입·퇴장/스냅샷 시 갱신) */
 export const useSelf = () =>
   useGameStore((s) => (s.selfId ? s.players[s.selfId] : undefined));
+
+/** 서버 기준 현재 시각(ms) */
+export const serverNow = () => Date.now() + useGameStore.getState().clockOffset;
+
+/** 내 생존 여부 (관전자/미접속이면 false) */
+export const useSelfAlive = () =>
+  useGameStore((s) => (s.selfId ? s.players[s.selfId]?.alive ?? false : false));
 
 // 개발 중 콘솔/E2E 테스트에서 상태 확인용
 if (import.meta.env.DEV) {
