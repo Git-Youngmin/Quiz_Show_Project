@@ -14,3 +14,6 @@ services:
       # 다른 도메인에서 프론트엔드를 띄울 경우 해당 Origin 을 쉼표로 지정 (기본: 전체 허용)
       - key: ALLOWED_ORIGINS
         value: "*"
+      # Render 프록시가 붙여주는 X-Forwarded-For 로 클라이언트 IP 식별 (관리자 비밀번호 실패 횟수 제한)
+      - key: TRUST_PROXY
+        value: "true"

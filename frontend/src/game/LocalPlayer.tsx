@@ -11,6 +11,7 @@ import { Vector3, type Group } from "three";
 import { FELL_Y, type CharacterShape, type Vec3 } from "@quiz/shared";
 import { useGameStore } from "../store/useGameStore";
 import { usePlayerInput } from "./input/usePlayerInput";
+import { audio } from "../audio/AudioManager";
 import { Character } from "./Character";
 import {
   CAMERA_OFFSET,
@@ -133,7 +134,10 @@ export function LocalPlayer({ spawn, color, shape, name, alive }: Props) {
 
     // ── 점프: 키를 누르는 순간(엣지)에만, 접지 상태에서 ──
     let vy = vel.y;
-    if (input.jump && !jumpHeld.current && grounded) vy = JUMP_VELOCITY;
+    if (input.jump && !jumpHeld.current && grounded) {
+      vy = JUMP_VELOCITY;
+      audio.playSfx("jump", { rate: 0.93 + Math.random() * 0.14 }); // 매번 살짝 다른 높이
+    }
     jumpHeld.current = input.jump;
 
     rb.setLinvel({ x: vx, y: vy, z: vz }, true);

@@ -25,8 +25,15 @@ function connect(label, q) {
 }
 const send = (c, m) => c.ws.send(JSON.stringify(m));
 
+// 관리자는 방을 먼저 만들고(비밀번호 설정) 그 비밀번호로 접속
+const HTTP = BASE.replace(/^ws/, "http");
+const created = await fetch(`${HTTP}/api/rooms`, {
+  method: "POST", headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ roomId: ROOM, adminPassword: "test-pass" }),
+});
+if (created.status !== 201) throw new Error(`room create failed: ${created.status}`);
 const display = await connect("display", { role: "display" });
-const admin = await connect("admin", { role: "admin" });
+const admin = await connect("admin", { role: "admin", password: "test-pass" });
 const alice = await connect("alice", { role: "player", name: "Alice" });
 const bob = await connect("bob", { role: "player", name: "Bob" });
 await sleep(200);

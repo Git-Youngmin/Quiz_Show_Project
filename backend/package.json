@@ -12,7 +12,8 @@
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",
     "test:ws": "node scripts/ws-smoke-test.mjs",
-    "test:game": "node scripts/game-flow-test.mjs"
+    "test:game": "node scripts/game-flow-test.mjs",
+    "test:auth": "node scripts/admin-auth-test.mjs"
   },
   "dependencies": {
     "@quiz/shared": "*",

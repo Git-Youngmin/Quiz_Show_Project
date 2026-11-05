@@ -9,6 +9,7 @@
  *    waiting → countdown → question_active → reveal → elimination → waiting | game_over
  * 4. 퀴즈 유형: OX(좌우 2분할) / MULTIPLE(십자 4분할) — 구역 판정은 shared 의 zoneAt()
  */
+import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import type { WebSocket } from "ws";
 import {
   BARRIER_LEAD_MS,
@@ -61,12 +62,34 @@ export class GameRoom {
   private secretAnswer: Answer | null = null;
   /** reveal 시작(=차단벽이 완전히 올라온 뒤) 시점의 플레이어별 구역 — 판정 기준 */
   private lockedZones = new Map<string, Answer>();
+  /** 방장 비밀번호 (평문 대신 scrypt 해시 + salt 만 메모리에 보관) */
+  private adminSecret: { salt: Buffer; hash: Buffer } | null = null;
 
   constructor(
     readonly roomId: string,
     /** 마지막 연결이 끊겼을 때 호출 (방 정리 예약용) */
     private readonly onEmpty: () => void,
   ) {}
+
+  // ───────────── 관리자 비밀번호 ─────────────
+
+  hasAdminPassword() {
+    return this.adminSecret !== null;
+  }
+
+  /** 방 생성 시 1회만 설정 가능. 이미 설정돼 있으면 false */
+  setAdminPassword(password: string): boolean {
+    if (this.adminSecret) return false;
+    const salt = randomBytes(16);
+    this.adminSecret = { salt, hash: scryptSync(password, salt, 32) };
+    return true;
+  }
+
+  verifyAdminPassword(password: string): boolean {
+    if (!this.adminSecret) return false;
+    const hash = scryptSync(password, this.adminSecret.salt, 32);
+    return timingSafeEqual(hash, this.adminSecret.hash); // 타이밍 공격 방지
+  }
 
   // ───────────── 접속 처리 ─────────────
 

@@ -208,9 +208,32 @@ export const isBarrierPhase = (phase: GamePhase) =>
   phase === "question_active" || phase === "reveal" || phase === "elimination";
 export const MAX_PLAYERS_PER_ROOM = 100;
 
+// ───────────── 관리자 인증 ─────────────
+
+export const ADMIN_PASSWORD_LENGTH = { min: 4, max: 64 } as const;
+export const ROOM_ID_PATTERN = /^[A-Za-z0-9_-]{1,32}$/;
+
+/**
+ * 관리자 접속 거부 시 WebSocket close code (4000~4999 는 앱 정의 영역).
+ * 브라우저는 업그레이드 실패(HTTP 401 등)의 이유를 읽을 수 없으므로
+ * 연결을 받은 뒤 이 코드로 닫아 클라이언트가 원인을 표시할 수 있게 한다.
+ */
+export const CLOSE_CODE = {
+  ADMIN_AUTH_FAILED: 4001,
+  ROOM_NOT_FOUND: 4004,
+  TOO_MANY_ATTEMPTS: 4029,
+} as const;
+
+/** POST /api/rooms 요청 본문 — 방 생성 + 방장 비밀번호 설정 */
+export interface CreateRoomRequest {
+  roomId: string;
+  adminPassword: string;
+}
+
 /**
  * WebSocket 접속 URL 경로 (입장 정보는 쿼리로 전달)
  *   /api/rooms/:roomId/ws?role=player&name=닉네임&shape=box&color=%23ff5c8a
+ *   /api/rooms/:roomId/ws?role=admin&password=방장비밀번호
  */
 export const wsPath = (roomId: string) =>
   `/api/rooms/${encodeURIComponent(roomId)}/ws`;

@@ -14,6 +14,7 @@
  */
 import { create } from "zustand";
 import {
+  CLOSE_CODE,
   INITIAL_GAME_STATE,
   wsPath,
   type CharacterShape,
@@ -41,7 +42,12 @@ export interface ConnectOptions {
   /** 로비에서 고른 외형 (player 전용) */
   shape?: CharacterShape;
   color?: string;
+  /** 관리자 전용: 방장 비밀번호 */
+  password?: string;
 }
+
+/** 서버가 앱 정의 close code 로 끊은 경우 (재연결하지 않음) */
+const FATAL_CLOSE_CODES: number[] = Object.values(CLOSE_CODE);
 
 interface StoreState {
   // ── 연결 상태 ──
@@ -54,6 +60,8 @@ interface StoreState {
   /** 서버 시계 - 로컬 시계 (ms). 남은 시간 계산에 사용 → serverNow() */
   clockOffset: number;
   lastError: string | null;
+  /** 관리자 인증 실패 등 재연결하면 안 되는 종료 사유 (CLOSE_CODE) */
+  fatalCloseCode: number | null;
 
   // ── 월드 상태 ──
   playerIds: string[];
@@ -98,7 +106,7 @@ let lastSent: { p: Vec3; r: number } | null = null;
 let pendingMove: { p: Vec3; r: number } | null = null;
 let pendingMoveTimer: ReturnType<typeof setTimeout> | null = null;
 
-function resolveWsUrl({ roomId, role, name, shape, color }: ConnectOptions): string {
+function resolveWsUrl({ roomId, role, name, shape, color, password }: ConnectOptions): string {
   // 별도 배포: VITE_WS_BASE=wss://서버주소 / 기본: 현재 host (개발 시 Vite 프록시 → 8787, 배포 시 같은 Node 서버)
   const base =
     import.meta.env.VITE_WS_BASE ??
@@ -107,6 +115,7 @@ function resolveWsUrl({ roomId, role, name, shape, color }: ConnectOptions): str
   if (name) q.set("name", name);
   if (shape) q.set("shape", shape);
   if (color) q.set("color", color);
+  if (password) q.set("password", password);
   return `${base.replace(/\/$/, "")}${wsPath(roomId)}?${q}`;
 }
 
@@ -259,6 +268,12 @@ export const useGameStore = create<StoreState>()((set, get) => {
       set({ status: "closed", selfId: null, players: {}, playerIds: [], game: INITIAL_GAME_STATE });
 
       if (manualClose) return;
+      if (FATAL_CLOSE_CODES.includes(e.code)) {
+        // 비밀번호 오류 등: 같은 정보로 재시도해도 실패하므로 재연결 중단
+        connectOpts = null;
+        set({ status: "idle", fatalCloseCode: e.code, lastError: null });
+        return;
+      }
       // 지수 백오프 재연결: 0.5s, 1s, 2s, 4s ... 최대 10s
       const delay = Math.min(500 * 2 ** reconnectAttempts, MAX_RECONNECT_DELAY_MS);
       reconnectAttempts++;
@@ -301,6 +316,7 @@ export const useGameStore = create<StoreState>()((set, get) => {
     latency: null,
     clockOffset: 0,
     lastError: null,
+    fatalCloseCode: null,
     playerIds: [],
     players: {},
     game: INITIAL_GAME_STATE,
@@ -315,12 +331,14 @@ export const useGameStore = create<StoreState>()((set, get) => {
         connectOpts.role === opts.role &&
         connectOpts.name === opts.name &&
         connectOpts.shape === opts.shape &&
-        connectOpts.color === opts.color
+        connectOpts.color === opts.color &&
+        connectOpts.password === opts.password
       ) {
         return;
       }
       get().disconnect();
       manualClose = false;
+      set({ fatalCloseCode: null });
       reconnectAttempts = 0;
       connectOpts = opts;
       set({ roomId: opts.roomId, role: opts.role });
@@ -341,6 +359,7 @@ export const useGameStore = create<StoreState>()((set, get) => {
         playerIds: [],
         latency: null,
         game: INITIAL_GAME_STATE,
+        fatalCloseCode: null,
       });
     },
 

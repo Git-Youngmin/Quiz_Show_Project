@@ -42,8 +42,37 @@
 |---|---|---|
 | `/` | 참가자 | 로비 (닉네임·방 코드·캐릭터 선택) |
 | `/play?room=…` | 참가자 | 3D 플레이 화면 (PC: WASD/방향키 + Space, 모바일: 조이스틱) |
-| `/admin?room=…` | 진행자 | 문제 출제(O/X · 4지선다), 진행 상황, 라운드 리셋 |
+| `/admin?room=…` | 진행자 | **방장 비밀번호 로그인** 후 문제 출제(O/X · 4지선다), 진행 상황, 라운드 리셋 |
 | `/display?room=…` | 방송 송출 | UI를 최소화한 관전 뷰, 게임 단계별 다이나믹 카메라 |
+
+## 방송 진행 순서
+
+1. `/admin`에서 **새 방 만들기**를 고르고, 방 코드와 방장 비밀번호를 정합니다.
+2. 관리자 패널 아래쪽의 **참가 링크**를 참가자에게 공유하고, **송출 화면** 주소를 OBS 브라우저 소스에 넣습니다.
+3. 참가자가 모이면 문제를 출제합니다. 마지막 1명이 남으면 우승 연출이 나오고, **라운드 리셋**으로 새 게임을 시작합니다.
+
+> 관리자 페이지를 새로고침해도 같은 탭에서는 로그인이 유지됩니다(`sessionStorage`). 탭을 닫으면 다시 입력해야 합니다.
+
+## 사운드
+
+`howler.js`로 재생합니다. `frontend/public/sounds/`의 파일을 **같은 이름으로 덮어쓰면** 교체됩니다. 지금 들어 있는 파일은 `frontend/scripts/generate-placeholder-sounds.py`로 합성한 임시 음원입니다.
+
+| 파일 | 종류 | 재생 시점 |
+|---|---|---|
+| `bgm_waiting.mp3` | BGM (반복) | 대기 중, 우승 팡파르 이후 |
+| `bgm_tension.mp3` | BGM (반복) | 카운트다운 ~ 문제 진행 중 |
+| *(무음)* | 정적 | 정답 발표(`reveal`): BGM을 끊어 긴장감을 만듭니다 |
+| `tick.mp3` | 효과음 | 카운트다운 3·2·1 |
+| `barrier.mp3` | 효과음 | 차단벽이 솟아오를 때 |
+| `drop.mp3` | 효과음 | 오답 바닥이 꺼질 때 |
+| `fall.mp3` | 효과음 | 탈락자 비명 (참가자 화면: 내가 탈락할 때, 송출 화면: 탈락자 수만큼 최대 3번) |
+| `fanfare.mp3` | 효과음 | 우승자 결정 |
+| `pop.mp3` | 효과음 | 우승 폭죽 (5번 연달아) |
+| `jump.mp3` | 효과음 | 내가 점프할 때 (참가자 화면) |
+
+- 볼륨은 `frontend/src/audio/sounds.ts`에서 조절합니다. 참가자 화면은 BGM을 60% 크기로 틉니다.
+- 화면 오른쪽 위 버튼으로 음소거할 수 있고, 설정은 기억됩니다. 브라우저가 자동재생을 막으면 **"클릭해서 사운드 켜기"** 버튼이 나타납니다. OBS 브라우저 소스는 보통 자동재생이 허용됩니다.
+- 반복 재생하는 BGM은 mp3의 앞뒤 무음 때문에 이음새가 들릴 수 있습니다. 매끄럽게 이어지게 하려면 `.ogg`나 `.webm` 파일을 쓰고 `sounds.ts`의 경로를 바꾸세요.
 
 ## 기술 스택
 
@@ -86,6 +115,12 @@ npm run test:ws
 npm run test:game
 ```
 
+```bash
+npm run test:auth
+```
+
+`test:auth`는 실패 횟수 제한까지 검증하므로 백엔드를 `TRUST_PROXY=1`로 실행한 상태에서 돌려야 합니다.
+
 ## 무료 배포 (Render.com)
 
 Node 서버 하나가 **빌드된 프론트엔드와 WebSocket을 함께 서빙**하므로, 무료 웹 서비스 1개로 배포할 수 있습니다.
@@ -100,6 +135,7 @@ Node 서버 하나가 **빌드된 프론트엔드와 WebSocket을 함께 서빙*
 | `PORT` | `8787` | Render가 자동으로 지정 |
 | `ALLOWED_ORIGINS` | `*` | WebSocket 허용 Origin (쉼표 구분) |
 | `STATIC_DIR` | `frontend/dist` | 서빙할 프론트엔드 빌드 폴더 |
+| `TRUST_PROXY` | (꺼짐) | 프록시 뒤에서 `X-Forwarded-For`로 클라이언트 IP 식별. `render.yaml`에서 켜져 있음 |
 
 > **무료 플랜 참고:** 15분 동안 요청이 없으면 서버가 잠들고, 다음 접속 때 깨어나는 데 30초~1분 정도 걸립니다. 방송 전에 미리 한 번 접속해 두세요. 게임 상태는 메모리에만 있어서 서버가 재시작되면 초기화됩니다.
 
@@ -126,7 +162,12 @@ waiting ─(관리자 출제)→ countdown 3s → question_active N초 → revea
 
 ## WebSocket API
 
-`/api/rooms/:roomId/ws?role=player|admin|display&name=닉네임&shape=capsule|box|sphere|cone&color=%23ff5c8a`
+| 요청 | 설명 |
+|---|---|
+| `POST /api/rooms` | `{ roomId, adminPassword }` 방 생성 + 방장 비밀번호 설정. `201` 생성 / `409` 이미 방장이 있음 / `400` 형식 오류 |
+| `WS /api/rooms/:roomId/ws?role=player&name=…&shape=…&color=…` | 참가자 |
+| `WS /api/rooms/:roomId/ws?role=display` | 송출 화면 |
+| `WS /api/rooms/:roomId/ws?role=admin&password=…` | 관리자. 거부되면 close code `4001` 비밀번호 오류 / `4004` 방장 없는 방 / `4029` 시도 초과 |
 
 | 방향 | type | 설명 |
 |---|---|---|
@@ -142,4 +183,10 @@ waiting ─(관리자 출제)→ countdown 3s → question_active N초 → revea
 | S→C | `players_eliminated` | `{ ids }` |
 | S→C | `round_reset` | 전원 부활 + 새 스폰 위치 |
 
-> 관리자 인증은 아직 없습니다. `role=admin`으로 접속하면 누구나 출제할 수 있으니, 공개 방송에서는 방 코드를 추측하기 어렵게 정하세요.
+## 보안 메모
+
+- 방장 비밀번호는 scrypt 해시로만 서버 메모리에 저장하고, 비교할 때 시간 차이로 정보가 새지 않게 합니다(`timingSafeEqual`).
+- 같은 IP에서 5분 동안 10번 넘게 틀리면 그 IP의 관리자 로그인을 잠시 막습니다.
+- 한 번 정한 비밀번호는 덮어쓸 수 없습니다(`409`). 서버가 재시작되거나 방이 2시간 동안 비어 있으면 방과 비밀번호가 사라집니다.
+- 비밀번호가 WebSocket 주소의 쿼리로 전달되므로 반드시 HTTPS(`wss://`)로 서비스하세요. Render는 기본으로 HTTPS입니다. 비밀번호는 브라우저 주소창에는 남지 않습니다.
+- 송출 화면(`role=display`)은 보기만 할 수 있어서 비밀번호 없이 열립니다.

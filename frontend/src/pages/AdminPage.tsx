@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
 import {
   MAX_CHOICE_LENGTH,
   MAX_QUESTION_LENGTH,
@@ -11,7 +12,14 @@ import {
 import { ConnectionStatus } from "../components/ConnectionStatus";
 import { PlayerTable } from "../components/PlayerTable";
 import { ChoiceGrid } from "../components/QuizBanner";
-import { useRoomConnection } from "../lib/useRoomConnection";
+import { AdminLogin } from "../components/AdminLogin";
+import {
+  CLOSE_REASON,
+  clearAdminSession,
+  loadAdminSession,
+  saveAdminSession,
+  type AdminSession,
+} from "../lib/adminSession";
 import { useCountdown } from "../lib/useCountdown";
 import { PHASE_LABEL } from "../lib/phase";
 import { useGameStore } from "../store/useGameStore";
@@ -19,9 +27,93 @@ import { useGameStore } from "../store/useGameStore";
 const CHOICE_LETTERS: Choice[] = ["A", "B", "C", "D"];
 const CHOICE_POS: Record<Choice, string> = { A: "좌상", B: "우상", C: "좌하", D: "우하" };
 
-/** 방장 패널 — 문제 출제(O/X · 4지선다) / 진행 상황 / 라운드 리셋 */
+/**
+ * /admin — 로그인 게이트.
+ * 비밀번호를 입력하기 전에는 WebSocket 을 열지 않고, 서버가 인증(welcome)해 준 뒤에만 콘솔을 보여준다.
+ */
 export default function AdminPage() {
-  const { roomId } = useRoomConnection("admin");
+  const [params, setParams] = useSearchParams();
+  const roomFromUrl = params.get("room") ?? "";
+  const [session, setSession] = useState<AdminSession | null>(() => loadAdminSession(roomFromUrl));
+  const [error, setError] = useState<string | null>(null);
+
+  if (!session) {
+    return (
+      <AdminLogin
+        initialRoom={roomFromUrl}
+        error={error}
+        onSubmit={(s) => {
+          setError(null);
+          setParams({ room: s.roomId }, { replace: true }); // 비밀번호는 URL 에 넣지 않음
+          setSession(s);
+        }}
+      />
+    );
+  }
+
+  return (
+    <AdminGate
+      key={`${session.roomId}:${session.password}`}
+      session={session}
+      onAuthenticated={() => saveAdminSession(session)}
+      onRejected={(reason) => {
+        clearAdminSession(session.roomId);
+        setError(reason);
+        setSession(null);
+      }}
+      onLogout={() => {
+        clearAdminSession(session.roomId);
+        setSession(null);
+      }}
+    />
+  );
+}
+
+/** 관리자 권한으로 WebSocket 접속 → 인증 결과에 따라 콘솔 표시 또는 로그인으로 복귀 */
+function AdminGate({
+  session,
+  onAuthenticated,
+  onRejected,
+  onLogout,
+}: {
+  session: AdminSession;
+  onAuthenticated: () => void;
+  onRejected: (reason: string) => void;
+  onLogout: () => void;
+}) {
+  const role = useGameStore((s) => s.role);
+  const selfId = useGameStore((s) => s.selfId);
+  const fatal = useGameStore((s) => s.fatalCloseCode);
+  const authed = role === "admin" && !!selfId;
+
+  useEffect(() => {
+    useGameStore.getState().connect({ roomId: session.roomId, role: "admin", password: session.password });
+    return () => useGameStore.getState().disconnect();
+  }, [session]);
+
+  useEffect(() => {
+    if (fatal !== null) onRejected(CLOSE_REASON[fatal] ?? "접속이 거부되었습니다.");
+  }, [fatal, onRejected]);
+
+  useEffect(() => {
+    if (authed) onAuthenticated();
+  }, [authed, onAuthenticated]);
+
+  if (!authed) {
+    return (
+      <div className="lobby">
+        <div className="lobby-card" style={{ textAlign: "center" }}>
+          <p>방장 인증 확인 중…</p>
+          <ConnectionStatus />
+        </div>
+      </div>
+    );
+  }
+  return <AdminConsole roomId={session.roomId} onLogout={onLogout} />;
+}
+
+/** 방장 패널 — 문제 출제(O/X · 4지선다) / 진행 상황 / 라운드 리셋 */
+function AdminConsole({ roomId, onLogout }: { roomId: string; onLogout: () => void }) {
   const status = useGameStore((s) => s.status);
   const game = useGameStore((s) => s.game);
   const players = useGameStore((s) => s.players);
@@ -56,7 +148,12 @@ export default function AdminPage() {
 
   return (
     <div className="page">
-      <h1>관리자 패널</h1>
+      <div className="row" style={{ justifyContent: "space-between" }}>
+        <h1>관리자 패널</h1>
+        <button className="btn secondary" type="button" onClick={onLogout}>
+          로그아웃
+        </button>
+      </div>
       <ConnectionStatus />
 
       {/* ── 진행 상황 ── */}
@@ -200,6 +297,8 @@ export default function AdminPage() {
         <PlayerTable />
         <p className="mono" style={{ opacity: 0.7 }}>
           참가 링크: {location.origin}/?room={roomId}
+          <br />
+          송출 화면: {location.origin}/display?room={roomId}
         </p>
       </div>
     </div>

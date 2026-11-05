@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { useFrame } from "@react-three/fiber";
 import { Color, DoubleSide, Object3D, type InstancedMesh } from "three";
 import { useGameStore } from "../store/useGameStore";
+import { audio } from "../audio/AudioManager";
 
 const COUNT = 420;
 const COLORS = ["#ff5c8a", "#ffb84d", "#ffe14d", "#7ae582", "#4dd9ff", "#6c8cff", "#b07cff", "#ffffff"];
@@ -34,6 +35,14 @@ export function Confetti({ targetId }: { targetId: string }) {
       life: new Float32Array(COUNT),
       fresh: new Uint8Array(COUNT).fill(1), // 1 = 아직 발사 전
     };
+  }, []);
+
+  // 폭죽 펑! — 첫 폭발 + 연달아 몇 발 (언마운트되면 남은 소리는 취소)
+  useEffect(() => {
+    const ids = [0, 380, 820, 1500, 2300].map((delayMs, i) =>
+      setTimeout(() => audio.playSfx("pop", { rate: 0.85 + Math.random() * 0.4, volume: i === 0 ? 1 : 0.7 }), delayMs),
+    );
+    return () => ids.forEach(clearTimeout);
   }, []);
 
   // 조각별 색상

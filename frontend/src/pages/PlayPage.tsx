@@ -7,6 +7,8 @@ import { ConnectionStatus } from "../components/ConnectionStatus";
 import { useRoomConnection } from "../lib/useRoomConnection";
 import { useGameStore, useSelf, useSelfAlive } from "../store/useGameStore";
 import { QuizBanner } from "../components/QuizBanner";
+import { SoundToggle } from "../components/SoundToggle";
+import { useGameAudio } from "../audio/useGameAudio";
 import { KEYBOARD_MAP } from "../game/input/controls";
 import { VirtualJoystick, shouldShowJoystick } from "../game/input/VirtualJoystick";
 import { World } from "../game/World";
@@ -26,6 +28,7 @@ export default function PlayPage() {
 
 function PlayScene() {
   useRoomConnection("player");
+  useGameAudio("play");
   const showJoystick = useMemo(shouldShowJoystick, []);
   const alive = useSelfAlive();
 
@@ -43,6 +46,7 @@ function PlayScene() {
         </Canvas>
 
         <PlayHud />
+        <SoundToggle />
         <QuizBanner showSelfStatus />
         {/* 탈락 후에도 관전석에서 움직일 수 있으므로 조작 UI 유지 */}
         {showJoystick ? (

@@ -3,6 +3,8 @@ import { Canvas } from "@react-three/fiber";
 import { Physics } from "@react-three/rapier";
 import { ConnectionStatus } from "../components/ConnectionStatus";
 import { QuizBanner } from "../components/QuizBanner";
+import { SoundToggle } from "../components/SoundToggle";
+import { useGameAudio } from "../audio/useGameAudio";
 import { useRoomConnection } from "../lib/useRoomConnection";
 import { World } from "../game/World";
 import { RemotePlayers } from "../game/RemotePlayers";
@@ -14,6 +16,7 @@ import { CameraDirector } from "../game/CameraDirector";
  */
 export default function DisplayPage() {
   useRoomConnection("display");
+  useGameAudio("display");
 
   return (
     <div className="stage">
@@ -27,6 +30,7 @@ export default function DisplayPage() {
         </Suspense>
       </Canvas>
       <QuizBanner />
+      <SoundToggle />
       <div className="hud display-hud">
         <ConnectionStatus />
       </div>

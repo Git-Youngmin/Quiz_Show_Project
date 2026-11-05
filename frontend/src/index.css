@@ -240,3 +240,20 @@ td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid #3b3755; }
 }
 .choice-input-row.is-answer .choice-letter { background: var(--zone); }
 .answer-tag { font-size: 12px; background: #1f7a4d; padding: 2px 8px; border-radius: 999px; }
+
+/* ───── Phase 7: 관리자 로그인 ───── */
+.segmented.full { display: flex; }
+.segmented.full button { flex: 1; }
+.admin-hint { margin: 0; font-size: 13px; opacity: .7; }
+.admin-error { margin: 0; padding: 10px 12px; border-radius: 8px; background: rgba(255, 92, 108, .15); color: #ff9aa5; font-size: 14px; }
+
+/* ───── Phase 7: 사운드 토글 ───── */
+.sound-toggle {
+  position: absolute; top: 12px; right: 12px; z-index: 25;
+  min-width: 40px; height: 40px; padding: 0 10px; border: 0; border-radius: 999px; cursor: pointer;
+  background: rgba(20, 18, 31, .6); color: #fff; font-size: 18px;
+}
+.sound-toggle.locked { font-size: 14px; background: #6c5cff; animation: pulse 1.6s ease-in-out infinite; }
+@keyframes pulse { 50% { transform: scale(1.06); } }
+/* 관전 배지는 사운드 버튼 아래로 (모바일은 기존처럼 하단) */
+@media (min-width: 641px) { .spectator-pill { top: 60px; } }
