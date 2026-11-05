@@ -121,9 +121,9 @@ function ThrowPad({ index, local }: { index: number; local: [number, number] }) 
     // 버튼 위에 탈락자가 서 있는지 (내 센서 상태 + 모든 플레이어 위치)
     let down = localOn.current;
     if (!down) {
+      // (보드 위 생존자는 관전석에 올 수 없으므로 생존 여부와 관계없이 위치만 봄 — 로비 중 관전석의 생존자 포함)
       for (const id in players) {
         const p = players[id];
-        if (p.alive) continue;
         if (Math.abs(p.p[0] - pad.x) < BUTTON.baseR && Math.abs(p.p[2] - pad.z) < BUTTON.baseR && p.p[1] > floorY && p.p[1] < floorY + 2) {
           down = true;
           break;
@@ -140,7 +140,7 @@ function ThrowPad({ index, local }: { index: number; local: [number, number] }) 
     const m = capMat.current;
     if (m) {
       const me = selfId ? players[selfId] : undefined;
-      const coolingDown = !!me && !me.alive && Date.now() < throwReadyAt;
+      const coolingDown = !!me && Date.now() < throwReadyAt;
       m.color.set(coolingDown ? "#6b6480" : PAD_COLOR);
       m.emissive.set(coolingDown ? "#000000" : PAD_COLOR);
       m.emissiveIntensity = coolingDown ? 0 : down ? 0.9 : 0.35 + 0.3 * Math.sin(state.clock.elapsedTime * 5 + index);

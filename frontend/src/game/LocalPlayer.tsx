@@ -9,7 +9,7 @@ import {
   type RapierRigidBody,
 } from "@react-three/rapier";
 import { Vector3, type Group } from "three";
-import { FELL_Y, SPECTATOR_ZONES, type CharacterShape, type Vec3 } from "@quiz/shared";
+import { FELL_Y, SPECTATOR_ZONES, isLobbyPhase, type CharacterShape, type Vec3 } from "@quiz/shared";
 import { useGameStore } from "../store/useGameStore";
 import { usePlayerInput } from "./input/usePlayerInput";
 import { audio } from "../audio/AudioManager";
@@ -49,7 +49,9 @@ interface Props {
  * falling    : 막 탈락 — 조작 불가, 센서 상태로 바닥을 뚫고 낙하
  * spectating : 관전 구역으로 순간이동 — 다시 조작 가능 (유리 상자 안에서만)
  */
-type Mode = "playing" | "falling" | "spectating";
+type Mode = "playing" | "falling" | "spectating" | "lobbyStand";
+/** lobbyStand : 생존자지만 로비(대기·게임 종료) 동안 관전석에서 노는 중 — 게임이 시작되면 보드로 재배치됨 */
+const isStandMode = (m: Mode) => m === "spectating" || m === "lobbyStand";
 
 /** 낙하 중 카메라 위치 (보드 전체를 내려다봄) */
 const FALLING_CAMERA = new Vector3(0, 24, 28);
@@ -66,19 +68,29 @@ export function LocalPlayer({ spawn, color, shape, name, alive }: Props) {
   const getInput = usePlayerInput();
   const { world, rapier } = useRapier();
 
-  // 처음부터 탈락 상태(진행 중 난입)라면 관전 구역에서 시작
-  const [initialMode] = useState<Mode>(() => (alive ? "playing" : "spectating"));
+  // 처음부터 탈락 상태(진행 중 난입)라면 관전석에서 시작.
+  // 로비에서 "관전석" 을 골랐다면 생존자라도 관전석에서 시작
+  const [initialMode] = useState<Mode>(() => {
+    if (!alive) return "spectating";
+    const s = useGameStore.getState();
+    return isLobbyPhase(s.game.phase) && s.lobbySpot === "stand" ? "lobbyStand" : "playing";
+  });
   const mode = useRef<Mode>(initialMode);
   /** 내가 있는 관전석 번호 (관전 카메라 방향 결정) */
   const spectatorZone = useRef(0);
+  /** 보드 위 스폰 위치 (서버가 정해 준 값) */
+  const boardSpawn = useMemo(
+    () => ({ x: spawn[0], y: Math.max(spawn[1], CHARACTER_CENTER_Y + 0.5), z: spawn[2] }),
+    [spawn],
+  );
   const spawnPos = useMemo(() => {
-    if (initialMode === "spectating") {
+    if (isStandMode(initialMode)) {
       const s = randomSpectatorSpawn();
       spectatorZone.current = s.zone;
       return s.pos;
     }
-    return { x: spawn[0], y: Math.max(spawn[1], CHARACTER_CENTER_Y + 0.5), z: spawn[2] };
-  }, [spawn, initialMode]);
+    return boardSpawn;
+  }, [boardSpawn, initialMode]);
   /** 외형 애니메이션(팔다리 흔들기, 착지 찌그러짐)에 넘겨줄 움직임 정보 */
   const motion = useRef<CharacterMotion>({ speed: 0, airborne: false, vy: 0 });
 
@@ -124,9 +136,27 @@ export function LocalPlayer({ spawn, color, shape, name, alive }: Props) {
       return;
     }
 
+    // ── 로비 중 보드 ↔ 관전석 이동 (HUD 버튼 / 입장 시 선택) ──
+    if (alive) {
+      const lobby = isLobbyPhase(store.game.phase);
+      const wantStand = lobby && store.lobbySpot === "stand";
+      if (wantStand && mode.current === "playing") {
+        const s = randomSpectatorSpawn();
+        spectatorZone.current = s.zone;
+        rb.setTranslation(s.pos, true);
+        rb.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        mode.current = "lobbyStand";
+      } else if (!wantStand && mode.current === "lobbyStand") {
+        // 보드로 (게임이 시작돼도 서버가 재배치하지만, 혹시 남아 있으면 여기서 복귀)
+        rb.setTranslation(boardSpawn, true);
+        rb.setLinvel({ x: 0, y: 0, z: 0 }, true);
+        mode.current = "playing";
+      }
+    }
+
     // ── 입력을 카메라 기준 방향으로 변환 (관전석에서는 카메라가 옆을 보므로 필요) ──
     const input = getInput();
-    if (mode.current === "spectating") {
+    if (isStandMode(mode.current)) {
       // 관전석: 카메라가 따라오며 잠깐 비스듬해져도 W 는 정확히 관전석 정면(보드 방향) — 발판 겨냥이 쉽도록
       const [fx, fz] = SPECTATOR_ZONES[spectatorZone.current].forward;
       camDir.set(fx, 0, fz);
@@ -179,7 +209,7 @@ export function LocalPlayer({ spawn, color, shape, name, alive }: Props) {
     if (visual.current) visual.current.rotation.y = rotY.current;
 
     // ── 낙사 처리 ──
-    if (mode.current === "spectating") {
+    if (isStandMode(mode.current)) {
       // 관전 구역은 밀폐되어 있지만 만약을 대비
       if (pos.y < FALL_LIMIT_Y) {
         const s = randomSpectatorSpawn();
@@ -200,7 +230,7 @@ export function LocalPlayer({ spawn, color, shape, name, alive }: Props) {
 
     // ── 카메라 ──
     const p = rb.translation();
-    if (mode.current === "spectating") {
+    if (isStandMode(mode.current)) {
       // 관전: 내 캐릭터 뒤 위에서 관전석의 정면(보드 중심 방향)을 곧게 바라봄
       // → W = 보드(투척 발판) 쪽 직진, A/D = 좌우 이동이라 발판을 겨냥하기 쉬움
       const [fx, fz] = SPECTATOR_ZONES[spectatorZone.current].forward;

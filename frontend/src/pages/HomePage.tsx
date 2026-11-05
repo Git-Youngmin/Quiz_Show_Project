@@ -1,6 +1,6 @@
 import { useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { CHARACTER_COLORS, CHARACTER_SHAPES, MAX_NAME_LENGTH, type CharacterShape } from "@quiz/shared";
+import { CHARACTER_COLORS, CHARACTER_SHAPES, MAX_NAME_LENGTH, type CharacterShape, type LobbySpot } from "@quiz/shared";
 import { AvatarPreview } from "../components/AvatarPreview";
 import { loadProfile, playSearch, saveProfile, type Profile } from "../lib/profile";
 import { useGameStore } from "../store/useGameStore";
@@ -32,6 +32,7 @@ export default function HomePage() {
   const [roomId, setRoomId] = useState(initial.roomId);
   const [shape, setShape] = useState<CharacterShape>(initial.shape);
   const [color, setColor] = useState(initial.color);
+  const [spot, setSpot] = useState<LobbySpot>(initial.spot);
 
   const trimmedName = name.trim();
   const roomValid = ROOM_PATTERN.test(roomId);
@@ -40,8 +41,9 @@ export default function HomePage() {
   const enter = (e: FormEvent) => {
     e.preventDefault();
     if (!canEnter) return;
-    const profile: Profile = { name: trimmedName, roomId, shape, color };
+    const profile: Profile = { name: trimmedName, roomId, shape, color, spot };
     saveProfile(profile);
+    useGameStore.getState().setLobbySpot(spot);
     useGameStore.getState().connect({ roomId, role: "player", name: trimmedName, shape, color });
     navigate(`/play${playSearch(profile)}`);
   };
@@ -123,6 +125,30 @@ export default function HomePage() {
               />
             ))}
           </div>
+        </fieldset>
+
+        <fieldset className="picker">
+          <legend>입장 위치</legend>
+          <div className="spot-grid">
+            {(
+              [
+                ["board", "🟦 퀴즈 보드", "생존자 자리 · 바로 퀴즈에 참가할 준비"],
+                ["stand", "🏟 관전석", "버튼을 밟아 보드 위 사람들에게 방해물 던지며 놀기"],
+              ] as const
+            ).map(([value, title, desc]) => (
+              <button
+                key={value}
+                type="button"
+                className={`spot-option ${spot === value ? "selected" : ""}`}
+                aria-pressed={spot === value}
+                onClick={() => setSpot(value)}
+              >
+                <b>{title}</b>
+                <span>{desc}</span>
+              </button>
+            ))}
+          </div>
+          <small className="spot-note">어디서 기다리든 게임이 시작되면 모두 보드로 이동해 참가해요.</small>
         </fieldset>
 
         <button className="btn lobby-enter" type="submit" disabled={!canEnter}>

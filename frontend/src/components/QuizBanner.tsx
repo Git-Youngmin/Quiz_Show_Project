@@ -14,6 +14,7 @@ export function QuizBanner({ showSelfStatus = false }: { showSelfStatus?: boolea
   const selfAlive = useSelfAlive();
   const selfId = useGameStore((s) => s.selfId);
   const selfEliminated = useGameStore((s) => s.selfEliminated);
+  const lobbySpot = useGameStore((s) => s.lobbySpot);
   const winnerName = useGameStore((s) => (s.game.winnerId ? s.players[s.game.winnerId]?.name ?? "???" : null));
   const remaining = useCountdown();
   const sec = remaining === null ? null : Math.ceil(remaining / 1000);
@@ -25,7 +26,11 @@ export function QuizBanner({ showSelfStatus = false }: { showSelfStatus?: boolea
       content = (
         <>
           <PlayerCount />
-          <div className="banner-sub">곧 퀴즈가 시작됩니다! 보드 위에서 기다려 주세요</div>
+          <div className="banner-sub">
+            {showSelfStatus && selfAlive && lobbySpot === "stand"
+              ? "관전석에서 대기 중 · 분홍 버튼을 밟아 방해물을 던져 보세요! 게임이 시작되면 보드로 이동해요"
+              : "곧 퀴즈가 시작됩니다! 보드 위에서 기다려 주세요"}
+          </div>
         </>
       );
       break;

@@ -29,8 +29,11 @@ const EMPTY_ADMIN_ROOM_TTL_MS = 2 * 60 * 60_000;
 /** 관리자 비밀번호 무차별 대입 방지: IP 당 윈도우 내 최대 실패 횟수 */
 const AUTH_MAX_FAILURES = 10;
 const AUTH_WINDOW_MS = 5 * 60_000;
-/** 죽은 연결(모바일 백그라운드 등) 감지용 ping 주기 */
-const HEARTBEAT_MS = 30_000;
+/**
+ * 죽은 연결 감지용 ping 주기. 응답(pong)이 한 번 없으면 다음 주기에 정리
+ * → 모바일에서 앱 전환/뒤로가기로 페이지가 얼어 close 신호를 못 보낸 플레이어도 15~30초 안에 방에서 빠짐
+ */
+const HEARTBEAT_MS = 15_000;
 
 const WS_ROUTE = /^\/api\/rooms\/([^/]+)\/ws$/;
 

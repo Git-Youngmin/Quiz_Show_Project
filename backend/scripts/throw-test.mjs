@@ -31,16 +31,26 @@ const bob = await connect({ role: "player", name: "Bob" });
 const carol = await connect({ role: "player", name: "Carol" });
 send(alice, { type: "move", p: [-5, 0.8, 0], r: 0 });
 
-// 생존자는 던질 수 없음
-send(bob, { type: "move", p: [PAD.x, ZONE_Y, PAD.z], r: 0 });
+// 로비(대기) 중에는 생존자도 관전석 버튼으로 던질 수 있음 (대기 시간 놀이)
+send(carol, { type: "move", p: [PADS[4].x, ZONE_Y, PADS[4].z], r: 0 });
 await sleep(150);
-send(bob, { type: "throw_item", pad: 1 });
+send(carol, { type: "throw_item", pad: 4 });
 await sleep(150);
-check("생존자의 투척 요청 무시", items(display).length === 0);
+check("로비 중 관전석의 생존자 투척 → 허용", items(display).length === 1 && items(display)[0].throwerId === carol.id);
+const base = items(display).length; // 이후 검증은 이 개수 이후부터
+const n = () => items(display).length - base;
+const nth = (c, i) => items(c)[base + i];
 
 // 문제 진행 중 Bob, Carol 이 떨어져 탈락 → 관전석 발판으로 이동
 send(admin, { type: "admin_start_game", quizzes: [{ quizType: "OX", question: "Q", answer: "O", timeLimitSec: 20 }] });
 await sleep(3300); // countdown 끝
+// 문제 진행 중 생존자(Alice)가 버튼 위치로 순간이동해 던지기 → 무시
+send(alice, { type: "move", p: [PADS[0].x, ZONE_Y, PADS[0].z], r: 0 });
+await sleep(120);
+send(alice, { type: "throw_item", pad: 0 });
+await sleep(150);
+check("문제 진행 중 생존자의 투척 요청 무시", n() === 0);
+send(alice, { type: "move", p: [-5, 0.8, 0], r: 0 });
 send(bob, { type: "fell" }); send(carol, { type: "fell" });
 await sleep(150);
 send(bob, { type: "move", p: [PAD.x + 0.3, ZONE_Y, PAD.z - 0.2], r: 0 });
@@ -49,8 +59,8 @@ await sleep(150);
 
 send(bob, { type: "throw_item", pad: 1 });
 await sleep(150);
-const first = items(display)[0];
-check("탈락자가 발판 위에서 투척 → item_spawned 브로드캐스트", !!first && items(alice).length === 1 && items(bob).length === 1,
+const first = nth(display, 0);
+check("탈락자가 발판 위에서 투척 → item_spawned 브로드캐스트", !!first && items(alice).length === base + 1 && items(bob).length === base + 1,
   first && `kind=${first.kind} origin=[${first.origin.map((v) => v.toFixed(1))}] speed=${first.speed.toFixed(1)}`);
 
 // 포물선 검증: 발사 후 비행 시간 동안 중력만 받으면 보드 위(±15) 높이 ~0.6 에 도달해야 함
@@ -72,7 +82,7 @@ if (first) {
 send(bob, { type: "throw_item", pad: 1 });
 await sleep(150);
 const cd = cooldowns(bob).at(-1);
-check("유저당 쿨타임 2초", items(display).length === 1 && !!cd && cd.retryInMs > 1500 && cd.retryInMs <= 2000, cd && `retryInMs=${cd.retryInMs}`);
+check("유저당 쿨타임 2초", n() === 1 && !!cd && cd.retryInMs > 1500 && cd.retryInMs <= 2000, cd && `retryInMs=${cd.retryInMs}`);
 
 // 방 전체 쿨타임: Bob 투척 직후(0.5초 이내) Carol 투척 → 거부, 0.5초 뒤 → 허용
 send(bob, { type: "move", p: [PAD.x, ZONE_Y, PAD.z], r: 0 });
@@ -80,11 +90,11 @@ await sleep(100);
 // 위에서 이미 ~300ms 지남 → 아직 방 쿨타임 안
 send(carol, { type: "throw_item", pad: 2 });
 await sleep(100);
-check("방 전체 쿨타임 0.5초 (직후 다른 유저 거부)", items(display).length === 1 && cooldowns(carol).length === 1);
+check("방 전체 쿨타임 0.5초 (직후 다른 유저 거부)", n() === 1 && cooldowns(carol).length === 1);
 await sleep(400);
 send(carol, { type: "throw_item", pad: 2 });
 await sleep(150);
-check("방 쿨타임 경과 후 다른 유저 허용", items(display).length === 2 && items(display)[1].throwerId === carol.id);
+check("방 쿨타임 경과 후 다른 유저 허용", n() === 2 && nth(display, 1).throwerId === carol.id);
 
 // 발판이 아닌 곳 / 잘못된 발판 번호 → 무시
 await sleep(2000);
@@ -93,16 +103,16 @@ await sleep(150);
 send(bob, { type: "throw_item", pad: 1 });
 send(bob, { type: "throw_item", pad: 7 });
 await sleep(200);
-check("발판 밖 위치 / 잘못된 발판 번호 무시", items(display).length === 2);
+check("발판 밖 위치 / 잘못된 발판 번호 무시", n() === 2);
 // 다른 발판 번호를 대면서 위치는 pad 1 인 경우도 무시
 send(bob, { type: "move", p: [PAD.x, ZONE_Y, PAD.z], r: 0 });
 await sleep(150);
 send(bob, { type: "throw_item", pad: 0 });
 await sleep(150);
-check("밟지 않은 발판 번호로 요청 → 무시", items(display).length === 2);
+check("밟지 않은 발판 번호로 요청 → 무시", n() === 2);
 send(bob, { type: "throw_item", pad: 1 });
 await sleep(150);
-check("쿨타임 후 정상 투척", items(display).length === 3);
+check("쿨타임 후 정상 투척", n() === 3);
 
 console.log(failed === 0 ? "✅ PASS" : `❌ FAIL (${failed})`);
 for (const c of [admin, display, alice, bob, carol]) c.ws.close();

@@ -34,6 +34,7 @@ import {
   TIME_LIMIT_SEC,
   WORLD_BOUNDS,
   ZONES,
+  isLobbyPhase,
   isCharacterColor,
   isCharacterShape,
   zoneAt,
@@ -340,8 +341,9 @@ export class GameRoom {
 
   private throwItem(ws: WebSocket, session: Session, pad: unknown) {
     const pl = session.player;
-    // 생존자/관리자/송출은 던질 수 없음 (조용히 무시)
-    if (!pl || pl.alive) return;
+    // 관리자/송출은 던질 수 없음. 생존자는 로비(대기·게임 종료) 중에만 관전석에서 던질 수 있음
+    if (!pl) return;
+    if (pl.alive && !isLobbyPhase(this.game.phase)) return;
     if (typeof pad !== "number" || !Number.isInteger(pad) || !THROW_PADS[pad]) return;
 
     // 위치 검증: 서버가 마지막으로 받은 위치가 해당 발판 위여야 함 (스냅샷 지연을 고려해 여유 있게)

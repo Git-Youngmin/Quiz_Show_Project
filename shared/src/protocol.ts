@@ -223,6 +223,15 @@ export const INITIAL_GAME_STATE: GameState = {
   winnerId: null,
 };
 
+/**
+ * 로비 단계(게임 시작 전 / 게임 종료 후)인지.
+ * 이때는 생존자도 보드와 관전석을 자유롭게 오가고, 관전석 버튼으로 방해물을 던지며 놀 수 있다.
+ */
+export const isLobbyPhase = (phase: GamePhase) => phase === "waiting" || phase === "game_over";
+
+/** 입장/대기 위치: 퀴즈 보드(생존자 자리) 또는 관전석 */
+export type LobbySpot = "board" | "stand";
+
 /** 차단벽이 올라와 있어야 하는 단계인지 (시각 조건은 barrierRaisesAt 으로 별도 확인) */
 export const isBarrierPhase = (phase: GamePhase) =>
   phase === "question_active" || phase === "reveal" || phase === "elimination";

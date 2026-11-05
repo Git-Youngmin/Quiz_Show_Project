@@ -17,6 +17,8 @@ import {
   CLOSE_CODE,
   INITIAL_GAME_STATE,
   THROW_COOLDOWN_MS,
+  isLobbyPhase,
+  type LobbySpot,
   wsPath,
   type CharacterShape,
   type ClientMessage,
@@ -85,6 +87,8 @@ interface StoreState {
    * 진행 중에 관전으로 입장한 경우는 false — 탈락이 아니라 "관전 입장" 안내만 보여준다.
    */
   selfEliminated: boolean;
+  /** 로비(대기·게임 종료) 동안 내가 있고 싶은 곳: 퀴즈 보드 / 관전석 */
+  lobbySpot: LobbySpot;
 
   // ── 탈락자 방해물 ──
   obstacles: ActiveObstacle[];
@@ -105,6 +109,8 @@ interface StoreState {
   throwItem: (pad: number, at?: Vec3) => void;
   /** 수명이 다한 방해물 제거 */
   removeObstacle: (id: number) => void;
+  /** 로비 위치 변경 (보드 ↔ 관전석). 실제 순간이동은 LocalPlayer 가 처리 */
+  setLobbySpot: (spot: LobbySpot) => void;
   /** 관리자: 퀴즈 세트로 게임 시작 */
   startGame: (quizzes: QuizItem[]) => void;
   /** 관리자: 라운드 결과 화면에서 다음 문제 출제 */
@@ -186,9 +192,12 @@ export const useGameStore = create<StoreState>()((set, get) => {
         break;
       }
 
-      case "game_state":
-        set({ game: msg.game });
+      case "game_state": {
+        // 게임이 시작되면 모두 보드에서 플레이 → 관전석 선택은 초기화 (끝난 뒤 다시 고를 수 있음)
+        const reset = !isLobbyPhase(msg.game.phase) && get().lobbySpot === "stand";
+        set({ game: msg.game, ...(reset ? { lobbySpot: "board" as const } : {}) });
         break;
+      }
 
       case "players_eliminated": {
         const next = { ...get().players };
@@ -363,6 +372,7 @@ export const useGameStore = create<StoreState>()((set, get) => {
     game: INITIAL_GAME_STATE,
     spawnVersion: 0,
     selfEliminated: false,
+    lobbySpot: "board",
     obstacles: [],
     throwReadyAt: 0,
 
@@ -411,7 +421,8 @@ export const useGameStore = create<StoreState>()((set, get) => {
     throwItem: (pad, at) => {
       const { selfId, players, throwReadyAt } = get();
       const me = selfId ? players[selfId] : undefined;
-      if (!me || me.alive || Date.now() < throwReadyAt) return;
+      // 탈락자는 언제나, 생존자는 로비(대기·게임 종료) 중 관전석에 있을 때만
+      if (!me || (me.alive && !isLobbyPhase(get().game.phase)) || Date.now() < throwReadyAt) return;
       // 서버는 마지막으로 받은 위치로 "발판 위인지" 검사한다.
       // 센서 이벤트는 물리 스텝 중에 오므로 이번 프레임 위치가 아직 전송 대기열에 없을 수 있다
       // → 밟은 순간의 정확한 위치를 투척 요청 직전에 보낸다 (같은 소켓이라 순서 보장)
@@ -427,6 +438,8 @@ export const useGameStore = create<StoreState>()((set, get) => {
       set({ throwReadyAt: Date.now() + THROW_COOLDOWN_MS.perPlayer });
       rawSend({ type: "throw_item", pad });
     },
+
+    setLobbySpot: (spot) => set({ lobbySpot: spot }),
 
     removeObstacle: (id) => {
       const obstacles = get().obstacles;
@@ -482,6 +495,32 @@ export const useGameStore = create<StoreState>()((set, get) => {
 /** 내 플레이어 정보 (입·퇴장/스냅샷 시 갱신) */
 export const useSelf = () =>
   useGameStore((s) => (s.selfId ? s.players[s.selfId] : undefined));
+
+/**
+ * 페이지를 떠날 때(탭 닫기, 뒤로가기, 모바일 앱 전환으로 페이지가 얼 때) 연결을 바로 끊는다.
+ * 브라우저가 페이지를 뒤로가기 캐시(bfcache)에 넣으면 소켓이 열린 채 남아 방에 유령 플레이어가 생길 수 있기 때문.
+ * 캐시에서 다시 돌아오면(pageshow persisted) 같은 정보로 다시 접속한다.
+ */
+let pausedByPageHide = false;
+if (typeof window !== "undefined") {
+  window.addEventListener("pagehide", () => {
+    if (!socket) return;
+    pausedByPageHide = true;
+    manualClose = true; // onclose 에서 재연결하지 않음
+    const ws = socket;
+    socket = null;
+    ws.close(1001, "page hidden");
+  });
+  window.addEventListener("pageshow", (e) => {
+    if (!e.persisted || !pausedByPageHide) return;
+    pausedByPageHide = false;
+    const opts = connectOpts;
+    if (opts) {
+      connectOpts = null; // connect() 의 중복 접속 방지 검사를 통과하도록
+      useGameStore.getState().connect(opts);
+    }
+  });
+}
 
 /** 서버 기준 현재 시각(ms) */
 export const serverNow = () => Date.now() + useGameStore.getState().clockOffset;

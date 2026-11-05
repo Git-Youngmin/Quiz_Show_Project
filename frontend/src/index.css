@@ -396,3 +396,33 @@ td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid #3b3755; }
 }
 .join-spectator-note b { font-size: 18px; }
 .join-spectator-note span { opacity: .8; font-size: 14px; }
+
+/* ───── 입장 위치 선택 / 오른쪽 위 버튼 ───── */
+.spot-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.spot-option {
+  display: grid; gap: 4px; text-align: left; padding: 12px; cursor: pointer;
+  background: #14121f; color: inherit; border: 2px solid #3b3755; border-radius: 12px;
+}
+.spot-option b { font-size: 15px; }
+.spot-option span { font-size: 12px; opacity: .75; }
+.spot-option.selected { border-color: #6c5cff; background: #2c2650; }
+.spot-note { display: block; margin-top: 6px; opacity: .65; font-size: 12px; }
+@media (max-width: 400px) { .spot-grid { grid-template-columns: 1fr; } }
+
+.play-corner { position: absolute; top: 12px; right: 60px; z-index: 25; display: flex; gap: 6px; }
+.corner-btn {
+  height: 40px; padding: 0 12px; border: 0; border-radius: 999px; cursor: pointer;
+  background: rgba(20, 18, 31, .6); color: #fff; font-size: 14px; white-space: nowrap;
+}
+.corner-btn.accent { background: rgba(108, 92, 255, .9); }
+/* 관전 배지(데스크톱)는 버튼 줄 아래로 */
+@media (min-width: 641px) { .spectator-pill { top: 60px; } }
+/* 모바일: 상단 배너·조이스틱과 겹치지 않게 점프 버튼 바로 위 오른쪽에 세로로 */
+@media (max-width: 640px) {
+  .play-corner {
+    top: auto; right: max(16px, env(safe-area-inset-right)); bottom: calc(max(48px, env(safe-area-inset-bottom)) + 108px);
+    flex-direction: column; align-items: flex-end;
+  }
+  .corner-btn { height: 36px; font-size: 13px; }
+  .spectator-pill { bottom: 250px; }
+}

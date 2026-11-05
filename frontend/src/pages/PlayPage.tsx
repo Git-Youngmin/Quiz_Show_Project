@@ -1,6 +1,6 @@
-import { Suspense, useMemo } from "react";
-import { Link, Navigate, useSearchParams } from "react-router-dom";
-import { CLOSE_CODE, MAX_PLAYERS_PER_ROOM } from "@quiz/shared";
+import { Suspense, useEffect, useMemo } from "react";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
+import { CLOSE_CODE, MAX_PLAYERS_PER_ROOM, isLobbyPhase } from "@quiz/shared";
 import { Canvas } from "@react-three/fiber";
 import { KeyboardControls } from "@react-three/drei";
 import { Physics } from "@react-three/rapier";
@@ -33,6 +33,14 @@ function PlayScene() {
   const showJoystick = useMemo(shouldShowJoystick, []);
   const alive = useSelfAlive();
   const fatal = useGameStore((s) => s.fatalCloseCode);
+  const [params] = useSearchParams();
+
+  // 로비에서 고른 입장 위치 (새로고침해도 URL 로 유지)
+  useEffect(() => {
+    useGameStore.getState().setLobbySpot(params.get("spot") === "stand" ? "stand" : "board");
+    // 처음 들어올 때 한 번만
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 정원(100명) 초과로 서버가 4009 로 끊은 경우
   if (fatal === CLOSE_CODE.ROOM_FULL) return <RoomFull />;
@@ -52,6 +60,7 @@ function PlayScene() {
 
         <PlayHud />
         <SoundToggle />
+        <PlayCorner />
         <QuizBanner showSelfStatus />
         {/* 탈락 후에도 관전석에서 움직일 수 있으므로 조작 UI 유지 */}
         {showJoystick ? (
@@ -126,6 +135,46 @@ function RoomFull() {
           로비로
         </Link>
       </div>
+    </div>
+  );
+}
+
+/**
+ * 오른쪽 위 버튼들
+ *  - [나가기]: 방에서 나가 로비로 (연결을 끊어 방 인원에서 바로 빠짐)
+ *  - [관전석으로 / 보드로]: 로비(대기·게임 종료) 중 생존자만, 원하는 곳에서 기다리기
+ */
+function PlayCorner() {
+  const navigate = useNavigate();
+  const [params] = useSearchParams();
+  const phase = useGameStore((s) => s.game.phase);
+  const spot = useGameStore((s) => s.lobbySpot);
+  const alive = useSelfAlive();
+  const connected = useGameStore((s) => !!s.selfId);
+  const canToggle = connected && alive && isLobbyPhase(phase);
+
+  return (
+    <div className="play-corner">
+      <button
+        type="button"
+        className="corner-btn"
+        onClick={() => {
+          if (!confirm("방에서 나갈까요?")) return;
+          useGameStore.getState().disconnect();
+          navigate(`/?${new URLSearchParams({ room: params.get("room") || "lobby" })}`);
+        }}
+      >
+        나가기
+      </button>
+      {canToggle && (
+        <button
+          type="button"
+          className="corner-btn accent"
+          onClick={() => useGameStore.getState().setLobbySpot(spot === "stand" ? "board" : "stand")}
+        >
+          {spot === "stand" ? "🟦 보드로" : "🏟 관전석으로"}
+        </button>
+      )}
     </div>
   );
 }
