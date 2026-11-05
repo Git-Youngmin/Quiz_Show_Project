@@ -1,0 +1,26 @@
+:root {
+  color-scheme: dark;
+  font-family: system-ui, -apple-system, "Segoe UI", "Noto Sans KR", sans-serif;
+  background: #14121f;
+  color: #f2f0ff;
+}
+* { box-sizing: border-box; }
+html, body, #root { margin: 0; height: 100%; }
+button, input { font: inherit; }
+
+.page { padding: 24px 16px; max-width: 720px; margin: 0 auto; }
+.card { background: #221f33; border-radius: 12px; padding: 16px; margin-top: 16px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.btn {
+  background: #6c5cff; color: #fff; border: 0; border-radius: 8px;
+  padding: 10px 16px; cursor: pointer; text-decoration: none; display: inline-block;
+}
+.btn:disabled { opacity: .5; cursor: default; }
+.input { background: #14121f; color: inherit; border: 1px solid #3b3755; border-radius: 8px; padding: 10px 12px; }
+.badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #3b3755; }
+.badge.open { background: #1f7a4d; }
+.badge.connecting { background: #8a6d1f; }
+.badge.closed { background: #7a1f2e; }
+.mono { font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
+table { width: 100%; border-collapse: collapse; }
+td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid #3b3755; }

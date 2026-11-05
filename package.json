@@ -3,11 +3,14 @@
   "private": true,
   "workspaces": [
     "shared",
-    "backend"
+    "backend",
+    "frontend"
   ],
   "scripts": {
     "dev:backend": "npm run dev -w backend",
-    "typecheck": "npm run typecheck -w backend",
+    "dev:frontend": "npm run dev -w frontend",
+    "build:frontend": "npm run build -w frontend",
+    "typecheck": "npm run typecheck -w backend && npm run typecheck -w frontend",
     "test:ws": "npm run test:ws -w backend"
   }
 }
