@@ -8,7 +8,7 @@ import {
   type RapierRigidBody,
 } from "@react-three/rapier";
 import { Vector3, type Group } from "three";
-import { FELL_Y, type Vec3 } from "@quiz/shared";
+import { FELL_Y, type CharacterShape, type Vec3 } from "@quiz/shared";
 import { useGameStore } from "../store/useGameStore";
 import { usePlayerInput } from "./input/usePlayerInput";
 import { Character } from "./Character";
@@ -33,6 +33,7 @@ function lerpAngle(a: number, b: number, t: number) {
 interface Props {
   spawn: Vec3;
   color: string;
+  shape: CharacterShape;
   name: string;
   alive: boolean;
 }
@@ -52,7 +53,7 @@ const BOARD_CENTER = new Vector3(0, 0, 0);
  * 내 캐릭터 — dynamic 강체. 위치의 "권한"은 로컬 물리엔진이 가진다.
  * 매 프레임: 입력(카메라 기준) → 속도 설정 → (물리 스텝) → 위치 읽어 sendMove + 카메라 추적
  */
-export function LocalPlayer({ spawn, color, name, alive }: Props) {
+export function LocalPlayer({ spawn, color, shape, name, alive }: Props) {
   const body = useRef<RapierRigidBody>(null);
   const collider = useRef<RapierCollider>(null);
   const visual = useRef<Group>(null);
@@ -191,10 +192,11 @@ export function LocalPlayer({ spawn, color, name, alive }: Props) {
       canSleep={false}
       ccd
     >
-      {/* friction 0: 속도를 직접 제어하므로 벽/다른 캐릭터에 달라붙지 않게 */}
+      {/* 외형과 무관하게 모두 같은 캡슐 충돌체 (공평성).
+          friction 0: 속도를 직접 제어하므로 벽/다른 캐릭터에 달라붙지 않게 */}
       <CapsuleCollider ref={collider} args={[CAPSULE_HALF_HEIGHT, CAPSULE_RADIUS]} friction={0} />
       <group ref={visual}>
-        <Character color={color} name={name} isSelf />
+        <Character color={color} shape={shape} name={name} isSelf />
       </group>
     </RigidBody>
   );

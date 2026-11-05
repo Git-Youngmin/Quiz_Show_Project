@@ -14,6 +14,9 @@
 import { DurableObject } from "cloudflare:workers";
 import {
   BARRIER_LEAD_MS,
+  CHARACTER_COLORS,
+  isCharacterColor,
+  isCharacterShape,
   FELL_Y,
   INITIAL_GAME_STATE,
   MAX_NAME_LENGTH,
@@ -52,10 +55,6 @@ interface StoredGame {
   lockedZones: Record<string, Answer>;
 }
 
-const COLORS = [
-  "#ff5c8a", "#ffb84d", "#ffe14d", "#7ae582", "#4dd9ff",
-  "#6c8cff", "#b07cff", "#ff7ce0", "#ff8a5c", "#5cffc8",
-];
 const SPAWN_RADIUS = 6;
 const GAME_KEY = "game";
 
@@ -120,10 +119,16 @@ export class GameRoom extends DurableObject<Env> {
     const attachment: SocketAttachment = { id, role };
 
     if (role === "player") {
+      // 입장 시 선택한 외형 (잘못된 값이면 기본값/자동 배정)
+      const shape = url.searchParams.get("shape");
+      const color = url.searchParams.get("color");
       attachment.player = {
         id,
         name: sanitizeName(url.searchParams.get("name")),
-        color: COLORS[this.playerCount() % COLORS.length],
+        color: isCharacterColor(color)
+          ? color.toLowerCase()
+          : CHARACTER_COLORS[this.playerCount() % CHARACTER_COLORS.length],
+        characterShape: isCharacterShape(shape) ? shape : "capsule",
         // 문제 진행 중 난입한 플레이어는 관전으로 시작
         alive: this.game.phase === "waiting",
         p: randomSpawn(),

@@ -17,6 +17,7 @@ import {
   INITIAL_GAME_STATE,
   wsPath,
   type Answer,
+  type CharacterShape,
   type ClientMessage,
   type GameState,
   type PlayerInfo,
@@ -33,10 +34,13 @@ export interface ClientPlayer extends PlayerInfo {
   updatedAt: number;
 }
 
-interface ConnectOptions {
+export interface ConnectOptions {
   roomId: string;
   role: Role;
   name?: string;
+  /** 로비에서 고른 외형 (player 전용) */
+  shape?: CharacterShape;
+  color?: string;
 }
 
 interface StoreState {
@@ -94,13 +98,15 @@ let lastSent: { p: Vec3; r: number } | null = null;
 let pendingMove: { p: Vec3; r: number } | null = null;
 let pendingMoveTimer: ReturnType<typeof setTimeout> | null = null;
 
-function resolveWsUrl({ roomId, role, name }: ConnectOptions): string {
+function resolveWsUrl({ roomId, role, name, shape, color }: ConnectOptions): string {
   // 배포: VITE_WS_BASE=wss://xxx.workers.dev / 개발: 현재 host (Vite 프록시 → 8787)
   const base =
     import.meta.env.VITE_WS_BASE ??
     `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}`;
   const q = new URLSearchParams({ role });
   if (name) q.set("name", name);
+  if (shape) q.set("shape", shape);
+  if (color) q.set("color", color);
   return `${base.replace(/\/$/, "")}${wsPath(roomId)}?${q}`;
 }
 
@@ -307,7 +313,9 @@ export const useGameStore = create<StoreState>()((set, get) => {
         connectOpts &&
         connectOpts.roomId === opts.roomId &&
         connectOpts.role === opts.role &&
-        connectOpts.name === opts.name
+        connectOpts.name === opts.name &&
+        connectOpts.shape === opts.shape &&
+        connectOpts.color === opts.color
       ) {
         return;
       }

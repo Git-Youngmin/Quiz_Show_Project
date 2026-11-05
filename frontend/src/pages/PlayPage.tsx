@@ -1,4 +1,5 @@
 import { Suspense, useMemo } from "react";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { Canvas } from "@react-three/fiber";
 import { KeyboardControls } from "@react-three/drei";
 import { Physics } from "@react-three/rapier";
@@ -15,6 +16,15 @@ import { CAMERA_OFFSET } from "../game/constants";
 
 /** 참가자 3D 뷰: PC(WASD/방향키 + Space) / 모바일(가상 조이스틱 + 점프 버튼) */
 export default function PlayPage() {
+  const [params] = useSearchParams();
+  // 닉네임 없이 들어오면(공유 링크 등) 로비로 보내 캐릭터를 먼저 고르게 함
+  if (!params.get("name")) {
+    return <Navigate to={`/?${new URLSearchParams({ room: params.get("room") || "lobby" })}`} replace />;
+  }
+  return <PlayScene />;
+}
+
+function PlayScene() {
   useRoomConnection("player");
   const showJoystick = useMemo(shouldShowJoystick, []);
   const alive = useSelfAlive();
@@ -63,6 +73,7 @@ function SelfPlayer() {
       key={`${selfId}:${spawnVersion}`}
       spawn={spawn.p}
       color={spawn.color}
+      shape={spawn.characterShape}
       name={spawn.name}
       alive={alive}
     />

@@ -121,3 +121,67 @@ td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid #3b3755; }
   background: rgba(194, 65, 12, .9); color: #fff; padding: 3px 10px; border-radius: 6px;
   font-size: 13px; font-weight: 700; white-space: nowrap; pointer-events: none;
 }
+
+/* ───── 로비 ───── */
+.lobby {
+  min-height: 100%; display: grid; place-items: center; padding: 24px 16px;
+  background:
+    radial-gradient(circle at 15% 20%, rgba(77, 139, 255, .35), transparent 40%),
+    radial-gradient(circle at 85% 80%, rgba(255, 92, 108, .3), transparent 40%),
+    #14121f;
+}
+.lobby-card {
+  width: min(560px, 100%); background: #221f33; border-radius: 20px; padding: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .4); display: grid; gap: 20px;
+}
+.lobby-header h1 { margin: 0; font-size: clamp(28px, 7vw, 40px); letter-spacing: -.5px; }
+.lobby-header p { margin: 4px 0 0; opacity: .75; }
+.lobby-grid { display: grid; grid-template-columns: 160px 1fr; gap: 20px; align-items: center; }
+@media (max-width: 480px) { .lobby-grid { grid-template-columns: 1fr; } }
+.lobby-preview {
+  display: grid; justify-items: center; gap: 10px; padding: 16px 0;
+  background: linear-gradient(#87c7ff, #b9dfff); border-radius: 16px;
+}
+.lobby-nameplate { font-size: 13px; max-width: 140px; overflow: hidden; text-overflow: ellipsis; }
+.lobby-fields { display: grid; gap: 12px; }
+.field { display: grid; gap: 6px; font-size: 14px; }
+.field .input { width: 100%; }
+.field-error { color: #ff8a8a; }
+.picker { border: 0; padding: 0; margin: 0; }
+.picker legend { font-size: 14px; margin-bottom: 8px; }
+.shape-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.shape-option {
+  display: grid; justify-items: center; gap: 6px; padding: 10px 4px; cursor: pointer;
+  background: #14121f; color: inherit; border: 2px solid #3b3755; border-radius: 12px;
+}
+.shape-option.selected { border-color: #6c5cff; background: #2c2650; }
+/* 6색이 좁은 화면에서도 항상 한 줄에 들어가도록 */
+.color-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 44px)); gap: 10px; }
+.color-swatch {
+  width: 100%; aspect-ratio: 1; padding: 0; border-radius: 50%; border: 3px solid transparent; cursor: pointer;
+  box-shadow: inset 0 -4px 0 rgba(0, 0, 0, .15);
+}
+.color-swatch.selected { border-color: #fff; transform: scale(1.08); }
+.lobby-enter { width: 100%; padding: 14px; font-size: 18px; font-weight: 700; }
+.lobby-links { display: flex; gap: 8px; justify-content: center; font-size: 13px; opacity: .7; }
+.lobby-links a { color: inherit; }
+
+/* CSS 캐릭터 미리보기 (3D Character 와 같은 실루엣) */
+.avatar { position: relative; display: grid; place-items: end center; }
+.avatar-body { position: absolute; bottom: 0; box-shadow: inset -6px -8px 0 rgba(0, 0, 0, .12); }
+.avatar-capsule .avatar-body { width: 56%; height: 100%; border-radius: 999px; }
+.avatar-box .avatar-body { width: 58%; height: 92%; border-radius: 10%; }
+.avatar-sphere .avatar-body { width: 82%; height: 82%; border-radius: 50%; }
+.avatar-cone .avatar-body { width: 76%; height: 96%; clip-path: polygon(50% 0, 100% 100%, 0 100%); box-shadow: none; }
+.avatar-eyes { position: absolute; display: flex; gap: 10%; width: 100%; justify-content: center; }
+.avatar-eyes span {
+  width: 13%; aspect-ratio: 1; border-radius: 50%; background: #fff; position: relative;
+}
+.avatar-eyes span::after {
+  content: ""; position: absolute; inset: 30% 22% 14% 22%; border-radius: 50%; background: #111;
+}
+.avatar-capsule .avatar-eyes { top: 26%; }
+.avatar-box .avatar-eyes { top: 28%; }
+.avatar-sphere .avatar-eyes { top: 40%; }
+.avatar-cone .avatar-eyes { top: 52%; gap: 4%; }
+.avatar-cone .avatar-eyes span { width: 10%; }

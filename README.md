@@ -22,7 +22,8 @@ npm run test:game -w backend  # (선택) 퀴즈 게임 루프 테스트
 
 | 경로 | 용도 |
 |---|---|
-| `/play?room=lobby&name=홍길동` | 참가자 |
+| `/` | 로비: 닉네임·방 코드·캐릭터 모양(캡슐/박스/구/콘)·색상 선택 후 입장 |
+| `/play?room=lobby&name=홍길동&shape=box&color=%23ff5c8a` | 참가자 (이름이 없으면 로비로 이동) |
 | `/admin?room=lobby` | 방장 패널 |
 | `/display?room=lobby` | 방송 송출 뷰 |
 
@@ -30,7 +31,9 @@ npm run test:game -w backend  # (선택) 퀴즈 게임 루프 테스트
 
 ## WebSocket API
 
-`GET /api/rooms/:roomId/ws?role=player|admin|display&name=닉네임`
+`GET /api/rooms/:roomId/ws?role=player|admin|display&name=닉네임&shape=capsule|box|sphere|cone&color=%23ff5c8a`
+
+외형(`characterShape`, `color`)은 `PlayerInfo`에 담겨 `welcome`/`player_joined`/`round_reset`으로 전달됩니다. 15Hz `snapshot`에는 위치·회전만 실립니다. 물리 충돌체는 외형과 무관하게 모두 동일한 캡슐입니다.
 
 | 방향 | type | 설명 |
 |---|---|---|

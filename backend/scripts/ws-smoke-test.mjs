@@ -22,8 +22,8 @@ function connect(label, q) {
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const display = await connect("display", { role: "display" });
-const alice = await connect("alice", { role: "player", name: "Alice" });
-const bob = await connect("bob", { role: "player", name: "Bob" });
+const alice = await connect("alice", { role: "player", name: "Alice", shape: "box", color: "#4DD9FF" });
+const bob = await connect("bob", { role: "player", name: "Bob", shape: "dragon", color: "#123456" }); // 잘못된 값
 await sleep(200);
 
 for (let i = 0; i < 5; i++) {
@@ -40,7 +40,19 @@ const left = display.log.some((m) => m.type === "player_left");
 const joined = display.log.filter((m) => m.type === "player_joined").length;
 
 console.log(`\nsnapshots=${snapshots.length}, joined=${joined}, left=${left}`);
-const ok = snapshots.length > 0 && snapshots.length < 10 && joined === 2 && left;
+// 외형: display 가 받은 player_joined 에 shape/color 가 실려야 함
+const joinedPlayers = display.log.filter((m) => m.type === "player_joined").map((m) => m.player);
+const a = joinedPlayers.find((p) => p.name === "Alice");
+const b = joinedPlayers.find((p) => p.name === "Bob");
+// 늦게 들어온 Bob 의 welcome 에도 Alice 외형이 있어야 함
+const bobWelcomeAlice = bob.log.find((m) => m.type === "welcome")?.players.find((p) => p.name === "Alice");
+const appearanceOk =
+  a?.characterShape === "box" && a.color === "#4dd9ff" &&
+  b?.characterShape === "capsule" && b.color !== "#123456" &&
+  bobWelcomeAlice?.characterShape === "box";
+console.log(`appearance ok=${appearanceOk}`, JSON.stringify({ a: [a?.characterShape, a?.color], b: [b?.characterShape, b?.color] }));
+
+const ok = snapshots.length > 0 && snapshots.length < 10 && joined === 2 && left && appearanceOk;
 console.log(ok ? "✅ PASS" : "❌ FAIL");
 alice.ws.close();
 display.ws.close();

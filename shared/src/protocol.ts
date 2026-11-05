@@ -8,11 +8,37 @@ export type Role = "player" | "admin" | "display";
 
 export type Vec3 = [x: number, y: number, z: number];
 
-/** 방에 존재하는 참가자(아바타)의 공개 정보 */
+// ───────────── 캐릭터 커스터마이징 ─────────────
+
+/** 캐릭터 외형 (물리 충돌체는 모양과 무관하게 모두 동일한 캡슐) */
+export type CharacterShape = "capsule" | "box" | "sphere" | "cone";
+export const CHARACTER_SHAPES: readonly CharacterShape[] = ["capsule", "box", "sphere", "cone"];
+
+/** 선택 가능한 밝은 색상 팔레트 (서버는 이 목록 외의 색은 거부) */
+export const CHARACTER_COLORS = [
+  "#ff5c8a", // 핑크
+  "#ffb84d", // 오렌지
+  "#ffe14d", // 옐로
+  "#7ae582", // 그린
+  "#4dd9ff", // 스카이
+  "#b07cff", // 퍼플
+] as const;
+
+export const isCharacterShape = (v: unknown): v is CharacterShape =>
+  typeof v === "string" && (CHARACTER_SHAPES as readonly string[]).includes(v);
+export const isCharacterColor = (v: unknown): v is string =>
+  typeof v === "string" && (CHARACTER_COLORS as readonly string[]).includes(v.toLowerCase());
+
+/**
+ * 방에 존재하는 참가자(아바타)의 공개 정보.
+ * welcome / player_joined / round_reset 으로 전체가 전달되고,
+ * 15Hz snapshot 에는 바뀌는 값(위치·회전)만 실린다.
+ */
 export interface PlayerInfo {
   id: string;
   name: string;
   color: string;
+  characterShape: CharacterShape;
   /** false = 탈락 (관전 상태) */
   alive: boolean;
   /** 위치 (x, y, z) */
@@ -146,6 +172,9 @@ export const isBarrierPhase = (phase: GamePhase) =>
   phase === "question_active" || phase === "reveal" || phase === "elimination";
 export const MAX_PLAYERS_PER_ROOM = 100;
 
-/** WebSocket 접속 URL 경로: /api/rooms/:roomId/ws?role=player&name=... */
+/**
+ * WebSocket 접속 URL 경로 (입장 정보는 쿼리로 전달)
+ *   /api/rooms/:roomId/ws?role=player&name=닉네임&shape=box&color=%23ff5c8a
+ */
 export const wsPath = (roomId: string) =>
   `/api/rooms/${encodeURIComponent(roomId)}/ws`;
