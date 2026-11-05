@@ -33,13 +33,15 @@ export interface PlayerState {
 /**
  * 한 문제의 진행 단계
  *  waiting → countdown → question_active → reveal → elimination → waiting ...
+ *                                                              └→ game_over (생존자 ≤ 1)
  */
 export type GamePhase =
   | "waiting" // 대기 (관리자의 출제 대기)
   | "countdown" // 문제 공개 전 카운트다운
   | "question_active" // 문제 공개 + 제한 시간 진행
   | "reveal" // 시간 종료, 정답 발표
-  | "elimination"; // 오답 구역 바닥 꺼짐
+  | "elimination" // 오답 구역 바닥 꺼짐
+  | "game_over"; // 최후의 1인 결정 (관리자 리셋 전까지 유지)
 
 export type Answer = "O" | "X";
 
@@ -56,6 +58,13 @@ export interface GameState {
   /** 현재 단계가 끝나는 서버 시각(epoch ms). null = 무기한 */
   phaseEndsAt: number | null;
   timeLimitSec: number;
+  /**
+   * O/X 사이 차단벽이 솟아오르는 서버 시각(epoch ms).
+   * question_active 종료 BARRIER_LEAD_MS 전 ~ elimination 끝까지 벽이 올라와 있음. null = 벽 내려감
+   */
+  barrierRaisesAt: number | null;
+  /** game_over 일 때 우승자 id (생존자 0명이면 null) */
+  winnerId: string | null;
 }
 
 // ───────────── Client → Server ─────────────
@@ -116,6 +125,8 @@ export const PHASE_DURATION_MS = {
   reveal: 3000,
   elimination: 4500,
 } as const;
+/** 제한 시간 종료 몇 ms 전에 차단벽이 올라오는지 */
+export const BARRIER_LEAD_MS = 1500;
 export const TIME_LIMIT_SEC = { min: 3, max: 60, default: 10 } as const;
 
 export const INITIAL_GAME_STATE: GameState = {
@@ -126,7 +137,13 @@ export const INITIAL_GAME_STATE: GameState = {
   droppedZone: null,
   phaseEndsAt: null,
   timeLimitSec: TIME_LIMIT_SEC.default,
+  barrierRaisesAt: null,
+  winnerId: null,
 };
+
+/** 차단벽이 올라와 있어야 하는 단계인지 (시각 조건은 barrierRaisesAt 으로 별도 확인) */
+export const isBarrierPhase = (phase: GamePhase) =>
+  phase === "question_active" || phase === "reveal" || phase === "elimination";
 export const MAX_PLAYERS_PER_ROOM = 100;
 
 /** WebSocket 접속 URL 경로: /api/rooms/:roomId/ws?role=player&name=... */

@@ -34,12 +34,12 @@ export default function PlayPage() {
 
         <PlayHud />
         <QuizBanner showSelfStatus />
-        {alive &&
-          (showJoystick ? (
-            <VirtualJoystick />
-          ) : (
-            <div className="hint">WASD / 방향키 이동 · Space 점프</div>
-          ))}
+        {/* 탈락 후에도 관전석에서 움직일 수 있으므로 조작 UI 유지 */}
+        {showJoystick ? (
+          <VirtualJoystick />
+        ) : (
+          <div className="hint">{alive ? "WASD / 방향키 이동 · Space 점프" : "관전석 · WASD 이동 · Space 점프"}</div>
+        )}
       </div>
     </KeyboardControls>
   );

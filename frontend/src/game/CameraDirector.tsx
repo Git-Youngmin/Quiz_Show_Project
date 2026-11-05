@@ -14,6 +14,7 @@ import { useGameStore } from "../store/useGameStore";
  *  question_active  : 보드 정면에서 좌우로 천천히 흔들리는 미디엄 샷
  *  reveal           : 생존자 무리를 낮은 앵글로 클로즈업하며 회전 + 긴장감 흔들림
  *  elimination      : ① 꺼지는 구역을 내려다보며 추락 추적 → ② 생존자 클로즈업
+ *  game_over        : 우승자에게 극적으로 줌인하며 천천히 회전
  *
  * 목표값(desired)을 계산한 뒤 지수 보간으로 부드럽게 따라가므로 단계가 바뀌어도 컷이 튀지 않는다.
  */
@@ -34,6 +35,7 @@ export function CameraDirector() {
   const smoothLook = useMemo(() => new Vector3(), []);
   const shot = useMemo<Shot>(() => ({ pos: new Vector3(), look: new Vector3(), fov: 45, shake: 0, speed: 2 }), []);
   const centroid = useMemo(() => new Vector3(), []);
+  const winnerPos = useMemo(() => new Vector3(), []);
   const phaseRef = useRef<{ phase: GamePhase; since: number }>({ phase: "waiting", since: 0 });
 
   useFrame((state, delta) => {
@@ -68,7 +70,11 @@ export function CameraDirector() {
     }
     centroid.y = 0.8;
 
-    planShot(shot, game.phase, game.droppedZone, pt, t, centroid, n, spread);
+    const winner = game.winnerId ? players[game.winnerId] : undefined;
+    const hasWinner = game.phase === "game_over" && !!winner;
+    if (winner) winnerPos.set(winner.p[0], winner.p[1], winner.p[2]);
+
+    planShot(shot, game.phase, game.droppedZone, pt, t, centroid, n, spread, hasWinner ? winnerPos : null);
 
     // ── 부드럽게 따라가기 ──
     const k = 1 - Math.exp(-dt * shot.speed);
@@ -100,11 +106,34 @@ function planShot(
   centroid: Vector3,
   survivors: number,
   spread: number,
+  winner: Vector3 | null,
 ) {
   const half = BOARD_SIZE / 2;
   shot.shake = 0;
 
   switch (phase) {
+    case "game_over": {
+      if (winner) {
+        // 멀리서 시작해 3.5초에 걸쳐 얼굴 앞까지 줌인 → 이후 가까이서 천천히 회전
+        const k = Math.min(pt / 3.5, 1);
+        const ease = 1 - Math.pow(1 - k, 3);
+        const dist = 14 - ease * 7.5; // 14 → 6.5 (머리 위 폭죽까지 프레임에 들어오는 거리)
+        const a = 0.3 + pt * 0.32;
+        shot.pos.set(winner.x + Math.sin(a) * dist, winner.y + 1.0 + dist * 0.18, winner.z + Math.cos(a) * dist);
+        shot.look.set(winner.x, winner.y + 1.8, winner.z);
+        shot.fov = 46 - ease * 8; // 화각도 좁혀 더 극적으로
+        shot.shake = pt < 0.5 ? 0.05 : 0;
+        shot.speed = 2.2;
+        break;
+      }
+      // 우승자 없음 → 대기와 같은 와이드 오비트
+      const a = t * 0.08;
+      shot.pos.set(Math.sin(a) * 34, 22, Math.cos(a) * 34);
+      shot.look.set(0, 0, 0);
+      shot.fov = 45;
+      shot.speed = 1.2;
+      break;
+    }
     case "waiting": {
       const a = t * 0.08;
       shot.pos.set(Math.sin(a) * 34, 22, Math.cos(a) * 34);

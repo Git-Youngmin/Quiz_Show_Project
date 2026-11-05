@@ -106,3 +106,18 @@ td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid #3b3755; }
 /* drei <Html> 이름표(z-index ≤ 10)보다 UI 오버레이가 위에 오도록 */
 .hud, .quiz-banner, .hint, .joystick, .jump-button { z-index: 20; }
 .eliminated-overlay { z-index: 15; }
+
+/* ───── Phase 4 ───── */
+.banner-big.winner { color: #ffe14d; animation: pop .6s ease-out; }
+.eliminated-overlay { animation: fade-out .6s ease-in 2.4s forwards; }
+@keyframes fade-out { to { opacity: 0; visibility: hidden; } }
+.spectator-pill {
+  position: absolute; top: 12px; right: 12px; z-index: 20; pointer-events: none;
+  background: rgba(194, 65, 12, .85); padding: 6px 12px; border-radius: 999px; font-size: 13px;
+  max-width: calc(100% - 24px);
+}
+@media (max-width: 640px) { .spectator-pill { top: auto; bottom: 190px; right: 50%; transform: translateX(50%); white-space: nowrap; } }
+.zone-label {
+  background: rgba(194, 65, 12, .9); color: #fff; padding: 3px 10px; border-radius: 6px;
+  font-size: 13px; font-weight: 700; white-space: nowrap; pointer-events: none;
+}

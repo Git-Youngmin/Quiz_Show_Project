@@ -1,5 +1,6 @@
 // 게임 루프 테스트: `npm run dev` 후 `npm run test:game`
-// Alice 는 O 구역(x<0), Bob 은 X 구역(x>0) 에 서 있고 정답이 O → Bob 탈락 확인
+// Alice 는 O 구역(x<0), Bob 은 X 구역(x>0) 에 서 있고 정답이 O → Bob 탈락 → Alice 우승(game_over)
+// + 차단벽 시각, reveal 중 순간이동(구역 lock) 무시 확인
 const BASE = process.env.WS_BASE ?? "ws://127.0.0.1:8787";
 const ROOM = `game-${Date.now()}`;
 const url = (q) => `${BASE}/api/rooms/${ROOM}/ws?${new URLSearchParams(q)}`;
@@ -37,8 +38,12 @@ send(admin, { type: "admin_start_question", question: "지구는 둥글다?", an
 await sleep(200);
 send(admin, { type: "admin_start_question", question: "중복", answer: "O", timeLimitSec: 3 }); // 진행 중 거부
 
+// question_active 진입 확인 후, reveal 시작 직후 Bob 이 O 구역으로 순간이동 시도 (무시되어야 함)
+await sleep(3000 + 3000 + 400);
+send(bob, { type: "move", p: [-5, 0.8, 0], r: 0 });
+
 // countdown 3s + question 3s + reveal 3s + elimination 4.5s ≈ 13.5s
-await sleep(14500);
+await sleep(14500 - 6400);
 
 const phases = display.log.filter((m) => m.type === "game_state").map((m) => m.game.phase);
 const elim = display.log.find((m) => m.type === "players_eliminated");
@@ -46,13 +51,21 @@ const answerLeakedEarly = alice.log.some(
   (m) => m.type === "game_state" && ["countdown", "question_active"].includes(m.game.phase) && m.game.answer,
 );
 console.log("phases:", phases.join(" → "));
+const qa = display.log.find((m) => m.type === "game_state" && m.game.phase === "question_active")?.game;
+const barrierOk = qa && qa.barrierRaisesAt === qa.phaseEndsAt - 1500;
+const over = display.log.findLast((m) => m.type === "game_state")?.game;
+const winnerOk = over?.phase === "game_over" && over.winnerId === alice.selfId;
+console.log(`barrierRaisesAt ok=${barrierOk}, winner=alice ${winnerOk}`);
+send(admin, { type: "admin_start_question", question: "game over 중 출제", answer: "O", timeLimitSec: 3 }); // 거부
+await sleep(200);
 
 send(admin, { type: "admin_reset" });
 await sleep(300);
 const reset = display.log.find((m) => m.type === "round_reset");
 
 const ok =
-  phases.join(",") === "countdown,question_active,reveal,elimination,waiting" &&
+  phases.join(",") === "countdown,question_active,reveal,elimination,game_over" &&
+  barrierOk && winnerOk &&
   elim?.ids.length === 1 && elim.ids[0] === bob.selfId &&
   !answerLeakedEarly &&
   reset?.players.every((p) => p.alive);

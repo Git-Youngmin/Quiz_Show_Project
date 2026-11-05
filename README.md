@@ -50,11 +50,15 @@ npm run test:game -w backend  # (선택) 퀴즈 게임 루프 테스트
 ## 게임 루프
 
 ```
-waiting ─(admin 출제)→ countdown 3s → question_active N초 → reveal 3s → elimination 4.5s → waiting
+waiting ─(admin 출제)→ countdown 3s → question_active N초 → reveal 3s → elimination 4.5s ─┬→ waiting
+                                                                                       └→ game_over (생존자 ≤ 1)
 ```
 
 - 단계 전환은 Durable Object **Alarm** 으로 처리 (hibernation 후에도 유지)
 - 정답은 `reveal` 전까지 클라이언트에 전송되지 않음
-- `reveal → elimination` 시 서버가 마지막 위치로 오답 구역(x<0: O, x≥0: X) 플레이어를 탈락 처리
+- 제한 시간 종료 1.5초 전(`barrierRaisesAt`) O/X 사이에 차단벽이 솟아오름 (서버 시계 기준 동기화)
+- `question_active → reveal` 시 플레이어별 구역을 확정(lock)하고, `reveal → elimination` 시 그 구역으로 탈락 판정
+- 탈락자는 보드를 뚫고 떨어진 뒤 보드 옆 밀폐된 관전석으로 순간이동 (안에서 자유롭게 이동 가능)
+- 생존자가 1명 이하가 되면 `game_over` + `winnerId` → 폭죽 & 우승자 줌인 카메라. 관리자 리셋으로 새 게임
 
 메시지 정의: `shared/src/protocol.ts`

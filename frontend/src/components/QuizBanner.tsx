@@ -10,6 +10,8 @@ export function QuizBanner({ showSelfStatus = false }: { showSelfStatus?: boolea
   const role = useGameStore((s) => s.role);
   const aliveCount = useGameStore((s) => Object.values(s.players).filter((p) => p.alive).length);
   const selfAlive = useSelfAlive();
+  const selfId = useGameStore((s) => s.selfId);
+  const winnerName = useGameStore((s) => (s.game.winnerId ? s.players[s.game.winnerId]?.name ?? "???" : null));
   const remaining = useCountdown();
   const sec = remaining === null ? null : Math.ceil(remaining / 1000);
 
@@ -58,16 +60,34 @@ export function QuizBanner({ showSelfStatus = false }: { showSelfStatus?: boolea
         </>
       );
       break;
+    case "game_over":
+      content = winnerName ? (
+        <>
+          <div className="banner-sub">최후의 1인</div>
+          <div className="banner-big winner">🏆 Winner: {winnerName}</div>
+          {selfId && selfId === game.winnerId && <div className="banner-sub">축하합니다! 당신이 우승했어요!</div>}
+        </>
+      ) : (
+        <>
+          <div className="banner-big">우승자 없음</div>
+          <div className="banner-sub">모두 탈락했어요 · 관리자가 새 게임을 시작할 수 있어요</div>
+        </>
+      );
+      break;
   }
 
   return (
     <>
       <div className="quiz-banner">{content}</div>
       {showSelfStatus && role === "player" && !selfAlive && (
-        <div className="eliminated-overlay">
-          <div className="eliminated-title">탈락</div>
-          <div>관전 중 · 관리자가 라운드를 리셋하면 다시 참가할 수 있어요</div>
-        </div>
+        <>
+          {/* 큰 "탈락" 문구는 잠시 보였다가 사라지고, 작은 관전 배지만 남음 */}
+          <div className="eliminated-overlay">
+            <div className="eliminated-title">탈락</div>
+            <div>관전석으로 이동합니다</div>
+          </div>
+          <div className="spectator-pill">관전 중 · 관전석에서 자유롭게 움직일 수 있어요</div>
+        </>
       )}
     </>
   );

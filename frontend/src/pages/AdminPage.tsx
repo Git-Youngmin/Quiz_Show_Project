@@ -14,6 +14,7 @@ export default function AdminPage() {
   const game = useGameStore((s) => s.game);
   const players = useGameStore((s) => s.players);
   const remaining = useCountdown();
+  const winnerName = useGameStore((s) => (s.game.winnerId ? s.players[s.game.winnerId]?.name ?? "(퇴장함)" : null));
 
   const [question, setQuestion] = useState("");
   const [answer, setAnswer] = useState<Answer>("O");
@@ -45,7 +46,12 @@ export default function AdminPage() {
           </div>
           <span>생존 {aliveCount} / {list.length}명</span>
         </div>
-        {game.question && (
+        {game.phase === "game_over" && (
+          <p style={{ marginBottom: 0, fontSize: 20 }}>
+            🏆 {winnerName ? <>우승자: <b>{winnerName}</b></> : "우승자 없음 (전원 탈락)"} — 새 게임은 라운드 리셋 후 시작하세요.
+          </p>
+        )}
+        {game.question && game.phase !== "game_over" && (
           <p style={{ marginBottom: 0 }}>
             Q. {game.question}
             {game.answer && <b> → 정답 {game.answer}</b>}
@@ -106,7 +112,7 @@ export default function AdminPage() {
           >
             라운드 리셋 (전원 부활)
           </button>
-          {game.phase !== "waiting" && <span>문제 진행이 끝나면 다음 문제를 낼 수 있어요.</span>}
+          {game.phase !== "waiting" && game.phase !== "game_over" && <span>문제 진행이 끝나면 다음 문제를 낼 수 있어요.</span>}
         </div>
       </form>
 

@@ -13,6 +13,7 @@
  */
 import { DurableObject } from "cloudflare:workers";
 import {
+  BARRIER_LEAD_MS,
   FELL_Y,
   INITIAL_GAME_STATE,
   MAX_NAME_LENGTH,
@@ -47,6 +48,8 @@ interface StoredGame {
   public: GameState;
   /** 출제된 정답 — reveal 전까지 클라이언트에 보내지 않음 */
   secretAnswer: Answer | null;
+  /** reveal 시작(=차단벽이 완전히 올라온 뒤) 시점의 플레이어별 구역 — 판정 기준 */
+  lockedZones: Record<string, Answer>;
 }
 
 const COLORS = [
@@ -66,6 +69,7 @@ export class GameRoom extends DurableObject<Env> {
 
   private game: GameState = { ...INITIAL_GAME_STATE };
   private secretAnswer: Answer | null = null;
+  private lockedZones: Record<string, Answer> = {};
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -86,6 +90,7 @@ export class GameRoom extends DurableObject<Env> {
       if (stored) {
         this.game = stored.public;
         this.secretAnswer = stored.secretAnswer;
+        this.lockedZones = stored.lockedZones ?? {};
       }
     });
   }
@@ -226,6 +231,10 @@ export class GameRoom extends DurableObject<Env> {
   }
 
   private async startQuestion(ws: WebSocket, rawQuestion: unknown, answer: unknown, timeLimit: unknown) {
+    if (this.game.phase === "game_over") {
+      this.send(ws, { type: "error", message: "게임이 끝났습니다. 라운드 리셋 후 새 게임을 시작하세요" });
+      return;
+    }
     if (this.game.phase !== "waiting") {
       this.send(ws, { type: "error", message: "이미 문제가 진행 중입니다" });
       return;
@@ -256,6 +265,7 @@ export class GameRoom extends DurableObject<Env> {
   private async resetRound() {
     await this.ctx.storage.deleteAlarm();
     this.secretAnswer = null;
+    this.lockedZones = {};
 
     for (const [ws, s] of this.sessions) {
       if (!s.player) continue;
@@ -286,14 +296,24 @@ export class GameRoom extends DurableObject<Env> {
     }
 
     switch (this.game.phase) {
-      case "countdown":
-        await this.setPhase({ phase: "question_active" }, this.game.timeLimitSec * 1000);
+      case "countdown": {
+        const durationMs = this.game.timeLimitSec * 1000;
+        // 차단벽은 제한 시간 종료 BARRIER_LEAD_MS 전에 솟아오름 (클라이언트가 서버 시계로 맞춰 연출)
+        const barrierRaisesAt = now + Math.max(0, durationMs - BARRIER_LEAD_MS);
+        await this.setPhase({ phase: "question_active", barrierRaisesAt }, durationMs);
         break;
+      }
 
-      case "question_active":
-        // 시간 종료 → 정답 공개
+      case "question_active": {
+        // 시간 종료 → 정답 공개. 이 시점엔 벽이 이미 올라와 있으므로 구역을 확정(lock)
+        this.lockedZones = {};
+        for (const s of this.sessions.values()) {
+          const pl = s.player;
+          if (pl?.alive) this.lockedZones[pl.id] = zoneOfX(pl.p[0]);
+        }
         await this.setPhase({ phase: "reveal", answer: this.secretAnswer }, PHASE_DURATION_MS.reveal);
         break;
+      }
 
       case "reveal": {
         // 오답 구역 판별 → 해당 구역 플레이어 탈락 + 바닥 꺼짐
@@ -303,8 +323,10 @@ export class GameRoom extends DurableObject<Env> {
         for (const s of this.sessions.values()) {
           const pl = s.player;
           if (!pl?.alive) continue;
-          // 서버가 마지막으로 받은 위치로 판정 (보고 누락/조작 대비)
-          if (zoneOfX(pl.p[0]) === wrongZone || pl.p[1] < FELL_Y) losers.push(pl.id);
+          // 확정된 구역 기준 (벽이 올라온 뒤 순간이동 같은 조작은 무시).
+          // reveal 도중 난입한 플레이어 등 lock 이 없으면 현재 위치로 판정
+          const zone = this.lockedZones[pl.id] ?? zoneOfX(pl.p[0]);
+          if (zone === wrongZone || pl.p[1] < FELL_Y) losers.push(pl.id);
         }
         // 상태를 먼저 보내 바닥 꺼짐 연출이 시작되게 한 뒤 탈락자 통보
         await this.setPhase({ phase: "elimination", droppedZone: wrongZone }, PHASE_DURATION_MS.elimination);
@@ -312,13 +334,33 @@ export class GameRoom extends DurableObject<Env> {
         break;
       }
 
-      case "elimination":
-        // 바닥 복구 → 다음 문제 대기 (생존자 유지)
+      case "elimination": {
         this.secretAnswer = null;
-        await this.setPhase({ phase: "waiting", question: null, answer: null, droppedZone: null }, null);
+        this.lockedZones = {};
+        const survivors = this.playerList().filter((p) => p.alive);
+        if (survivors.length <= 1) {
+          // 최후의 1인 (또는 전원 탈락) → 게임 종료. 관리자 리셋 전까지 유지
+          await this.setPhase({
+            phase: "game_over",
+            winnerId: survivors[0]?.id ?? null,
+            droppedZone: null,
+            barrierRaisesAt: null,
+          }, null);
+        } else {
+          // 바닥 복구 + 벽 내림 → 다음 문제 대기 (생존자 유지)
+          await this.setPhase({
+            phase: "waiting",
+            question: null,
+            answer: null,
+            droppedZone: null,
+            barrierRaisesAt: null,
+          }, null);
+        }
         break;
+      }
 
       case "waiting":
+      case "game_over":
         break;
     }
   }
@@ -334,6 +376,7 @@ export class GameRoom extends DurableObject<Env> {
     await this.ctx.storage.put<StoredGame>(GAME_KEY, {
       public: this.game,
       secretAnswer: this.secretAnswer,
+      lockedZones: this.lockedZones,
     });
     if (phaseEndsAt === null) await this.ctx.storage.deleteAlarm();
     else await this.ctx.storage.setAlarm(phaseEndsAt);
