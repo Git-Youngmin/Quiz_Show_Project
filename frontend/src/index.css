@@ -151,10 +151,59 @@ td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid #3b3755; }
 .picker { border: 0; padding: 0; margin: 0; min-inline-size: 0; }
 .picker legend { font-size: 14px; margin-bottom: 8px; }
 .shape-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.character-tabs {
+  display: flex; gap: 6px; background: rgba(0,0,0,0.25); padding: 4px; border-radius: 12px; margin-bottom: 12px;
+}
+.character-tab {
+  flex: 1; padding: 8px 4px; font-size: 14px; font-weight: 600; background: transparent;
+  border: none; border-radius: 8px; color: #a5a2bb; cursor: pointer; transition: all 0.15s ease;
+}
+.character-tab.active {
+  background: #6c5cff; color: #ffffff; box-shadow: 0 2px 8px rgba(108, 92, 255, 0.4);
+}
+.character-grid-20 {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px;
+  max-height: 240px; overflow-y: auto; padding-right: 4px;
+}
+.character-card {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; padding: 10px 4px; cursor: pointer;
+  background: #14121f; color: inherit; border: 2px solid #3b3755; border-radius: 12px;
+  transition: transform 0.1s ease, border-color 0.15s ease;
+}
+.character-card:hover { transform: translateY(-2px); border-color: #554f7a; }
+.character-card.selected { border-color: #6c5cff; background: #2c2650; transform: scale(1.03); }
+.character-card-icon { font-size: 26px; line-height: 1; }
+.character-card-name { font-size: 12px; font-weight: 600; }
+
+.accessory-grid {
+  display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px;
+}
+.accessory-card {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 4px; padding: 10px 4px; cursor: pointer;
+  background: #14121f; color: inherit; border: 2px solid #3b3755; border-radius: 12px;
+  transition: transform 0.1s ease, border-color 0.15s ease;
+}
+.accessory-card:hover { transform: translateY(-2px); border-color: #554f7a; }
+.accessory-card.selected { border-color: #6c5cff; background: #2c2650; transform: scale(1.03); }
+.accessory-card-icon { font-size: 24px; line-height: 1; }
+.accessory-card-name { font-size: 12px; font-weight: 600; }
+
+.color-grid-new {
+  display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px;
+}
+
+@media (max-width: 480px) {
+  .character-grid-20 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .color-grid-new { grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }
+}
+
 @media (max-width: 360px) {
   .lobby { padding: 16px 12px; }
   .lobby-card { padding: 16px; }
   .shape-grid, .color-grid { gap: 6px; }
+  .character-grid-20 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 .shape-option {
   display: grid; justify-items: center; gap: 6px; padding: 10px 4px; cursor: pointer;

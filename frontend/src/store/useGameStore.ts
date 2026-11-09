@@ -21,6 +21,7 @@ import {
   type LobbySpot,
   wsPath,
   type CharacterShape,
+  type CharacterAccessory,
   type ClientMessage,
   type GameState,
   type PlayerInfo,
@@ -45,6 +46,7 @@ export interface ConnectOptions {
   name?: string;
   /** 로비에서 고른 외형 (player 전용) */
   shape?: CharacterShape;
+  accessory?: CharacterAccessory;
   color?: string;
   /** 관리자 전용: 방장 비밀번호 */
   password?: string;
@@ -147,7 +149,7 @@ let lastSent: { p: Vec3; r: number } | null = null;
 let pendingMove: { p: Vec3; r: number } | null = null;
 let pendingMoveTimer: ReturnType<typeof setTimeout> | null = null;
 
-function resolveWsUrl({ roomId, role, name, shape, color, password }: ConnectOptions): string {
+function resolveWsUrl({ roomId, role, name, shape, accessory, color, password }: ConnectOptions): string {
   // 별도 배포: VITE_WS_BASE=wss://서버주소 / 기본: 현재 host (개발 시 Vite 프록시 → 8787, 배포 시 같은 Node 서버)
   const base =
     import.meta.env.VITE_WS_BASE ??
@@ -155,6 +157,7 @@ function resolveWsUrl({ roomId, role, name, shape, color, password }: ConnectOpt
   const q = new URLSearchParams({ role });
   if (name) q.set("name", name);
   if (shape) q.set("shape", shape);
+  if (accessory) q.set("accessory", accessory);
   if (color) q.set("color", color);
   if (password) q.set("password", password);
   return `${base.replace(/\/$/, "")}${wsPath(roomId)}?${q}`;

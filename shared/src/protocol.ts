@@ -10,24 +10,80 @@ export type Vec3 = [x: number, y: number, z: number];
 
 // ───────────── 캐릭터 커스터마이징 ─────────────
 
-/** 캐릭터 외형 (물리 충돌체는 모양과 무관하게 모두 동일한 캡슐) */
-export type CharacterShape = "capsule" | "box" | "sphere" | "cone";
-export const CHARACTER_SHAPES: readonly CharacterShape[] = ["capsule", "box", "sphere", "cone"];
+/** 20종 카훗 스타일 동물 및 크리처 캐릭터 */
+export const ANIMAL_CHARACTERS = [
+  "cat",     // 고양이
+  "dog",     // 강아지
+  "rabbit",  // 토끼
+  "bear",    // 곰
+  "panda",   // 팬더
+  "fox",     // 여우
+  "frog",    // 개구리
+  "penguin", // 펭귄
+  "duck",    // 오리
+  "pig",     // 돼지
+  "monkey",  // 원숭이
+  "koala",   // 코알라
+  "hamster", // 햄스터
+  "chick",   // 병아리
+  "tiger",   // 호랑이
+  "lion",    // 사자
+  "dragon",  // 드래곤
+  "robot",   // 로봇
+  "alien",   // 외계인
+  "ghost",   // 유령
+] as const;
 
-/** 선택 가능한 밝은 색상 팔레트 (서버는 이 목록 외의 색은 거부) */
+/** 기존 기본 도형 (하위 호환 유지) */
+export const LEGACY_SHAPES = ["capsule", "box", "sphere", "cone"] as const;
+
+/** 전체 캐릭터 외형 목록 */
+export const CHARACTER_SHAPES = [
+  ...ANIMAL_CHARACTERS,
+  ...LEGACY_SHAPES,
+] as const;
+
+export type CharacterShape = (typeof CHARACTER_SHAPES)[number];
+
+/** 캐릭터 꾸미기 악세사리 / 모자 */
+export const CHARACTER_ACCESSORIES = [
+  "none",        // 없음
+  "crown",       // 왕관
+  "party_hat",   // 파티 고깔모자
+  "headphones",  // 헤드폰
+  "cap",         // 캡 모자
+  "halo",        // 천사 링
+  "ribbon",      // 리본
+  "sunglasses",  // 선글라스
+  "glasses",     // 동글이 안경
+] as const;
+
+export type CharacterAccessory = (typeof CHARACTER_ACCESSORIES)[number];
+
+/** 선택 가능한 밝고 다양한 카훗풍 색상 팔레트 */
 export const CHARACTER_COLORS = [
-  "#ff5c8a", // 핑크
-  "#ffb84d", // 오렌지
-  "#ffe14d", // 옐로
-  "#7ae582", // 그린
-  "#4dd9ff", // 스카이
-  "#b07cff", // 퍼플
+  "#ff5c8a", // 스트로베리 핑크
+  "#ff4757", // 체리 레드
+  "#ff7f50", // 코랄 오렌지
+  "#ffa502", // 망고 오렌지
+  "#ffe14d", // 레몬 옐로우
+  "#7ae582", // 라임 그린
+  "#2ed573", // 민트 에메랄드
+  "#00d2d3", // 터콰이즈
+  "#4dd9ff", // 스카이 블루
+  "#2e86de", // 마린 블루
+  "#5352ed", // 네온 바이올렛
+  "#b07cff", // 라벤더 퍼플
+  "#ff9ff3", // 베이비 핑크
+  "#747d8c", // 쿨 그레이
 ] as const;
 
 export const isCharacterShape = (v: unknown): v is CharacterShape =>
-  typeof v === "string" && (CHARACTER_SHAPES as readonly string[]).includes(v);
+  typeof v === "string" && (CHARACTER_SHAPES as readonly string[]).includes(v as CharacterShape);
+export const isCharacterAccessory = (v: unknown): v is CharacterAccessory =>
+  typeof v === "string" && (CHARACTER_ACCESSORIES as readonly string[]).includes(v as CharacterAccessory);
 export const isCharacterColor = (v: unknown): v is string =>
-  typeof v === "string" && (CHARACTER_COLORS as readonly string[]).includes(v.toLowerCase());
+  typeof v === "string" && (CHARACTER_COLORS as readonly string[]).includes(v.toLowerCase() as (typeof CHARACTER_COLORS)[number]);
 
 /**
  * 방에 존재하는 참가자(아바타)의 공개 정보.
@@ -39,6 +95,7 @@ export interface PlayerInfo {
   name: string;
   color: string;
   characterShape: CharacterShape;
+  accessory?: CharacterAccessory;
   /** false = 탈락 (관전 상태) */
   alive: boolean;
   /** 위치 (x, y, z) */

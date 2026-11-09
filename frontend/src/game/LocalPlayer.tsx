@@ -9,7 +9,7 @@ import {
   type RapierRigidBody,
 } from "@react-three/rapier";
 import { Vector3, type Group } from "three";
-import { FELL_Y, SPECTATOR_ZONES, isLobbyPhase, type CharacterShape, type Vec3 } from "@quiz/shared";
+import { FELL_Y, SPECTATOR_ZONES, isLobbyPhase, type CharacterShape, type CharacterAccessory, type Vec3 } from "@quiz/shared";
 import { useGameStore } from "../store/useGameStore";
 import { usePlayerInput } from "./input/usePlayerInput";
 import { audio } from "../audio/AudioManager";
@@ -40,6 +40,7 @@ interface Props {
   spawn: Vec3;
   color: string;
   shape: CharacterShape;
+  accessory?: CharacterAccessory;
   name: string;
   alive: boolean;
 }
@@ -61,7 +62,7 @@ const BOARD_CENTER = new Vector3(0, 0, 0);
  * 내 캐릭터 — dynamic 강체. 위치의 "권한"은 로컬 물리엔진이 가진다.
  * 매 프레임: 입력(카메라 기준) → 속도 설정 → (물리 스텝) → 위치 읽어 sendMove + 카메라 추적
  */
-export function LocalPlayer({ spawn, color, shape, name, alive }: Props) {
+export function LocalPlayer({ spawn, color, shape, accessory, name, alive }: Props) {
   const body = useRef<RapierRigidBody>(null);
   const collider = useRef<RapierCollider>(null);
   const visual = useRef<Group>(null);
@@ -283,7 +284,7 @@ export function LocalPlayer({ spawn, color, shape, name, alive }: Props) {
         frictionCombineRule={CoefficientCombineRule.Min}
       />
       <group ref={visual}>
-        <Character color={color} shape={shape} name={name} isSelf motion={motion} />
+        <Character color={color} shape={shape} accessory={accessory} name={name} isSelf motion={motion} />
       </group>
     </RigidBody>
   );

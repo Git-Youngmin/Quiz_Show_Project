@@ -37,6 +37,7 @@ import {
   isLobbyPhase,
   isCharacterColor,
   isCharacterShape,
+  isCharacterAccessory,
   zoneAt,
   type Answer,
   type Choices,
@@ -132,6 +133,7 @@ export class GameRoom {
     if (role === "player") {
       const shape = params.get("shape");
       const color = params.get("color");
+      const accessory = params.get("accessory");
       session.player = {
         id,
         name: sanitizeName(params.get("name")),
@@ -139,6 +141,7 @@ export class GameRoom {
           ? color.toLowerCase()
           : CHARACTER_COLORS[this.playerCount() % CHARACTER_COLORS.length],
         characterShape: isCharacterShape(shape) ? shape : "capsule",
+        accessory: isCharacterAccessory(accessory) ? accessory : "none",
         // 로비/게임 종료 화면에서 들어오면 바로 참가 (다음 게임 시작 때 어차피 전원 부활).
         // 문제 진행 중·라운드 결과 중 난입한 플레이어만 관전으로 시작
         alive: this.game.phase === "waiting" || this.game.phase === "game_over",

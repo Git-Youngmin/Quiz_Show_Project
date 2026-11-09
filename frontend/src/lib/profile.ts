@@ -2,7 +2,9 @@ import {
   CHARACTER_COLORS,
   isCharacterColor,
   isCharacterShape,
+  isCharacterAccessory,
   type CharacterShape,
+  type CharacterAccessory,
   type LobbySpot,
 } from "@quiz/shared";
 
@@ -11,6 +13,7 @@ export interface Profile {
   name: string;
   roomId: string;
   shape: CharacterShape;
+  accessory: CharacterAccessory;
   color: string;
   /** 입장 위치: 퀴즈 보드(생존자 자리) / 관전석 */
   spot: LobbySpot;
@@ -21,7 +24,8 @@ const KEY = "quiz-show:profile";
 export const DEFAULT_PROFILE: Profile = {
   name: "",
   roomId: "lobby",
-  shape: "capsule",
+  shape: "cat",
+  accessory: "none",
   color: CHARACTER_COLORS[0],
   spot: "board",
 };
@@ -36,6 +40,7 @@ export function loadProfile(): Profile {
       name: typeof p.name === "string" ? p.name : "",
       roomId: typeof p.roomId === "string" && p.roomId ? p.roomId : DEFAULT_PROFILE.roomId,
       shape: isCharacterShape(p.shape) ? p.shape : DEFAULT_PROFILE.shape,
+      accessory: isCharacterAccessory(p.accessory) ? p.accessory : DEFAULT_PROFILE.accessory,
       color: isCharacterColor(p.color) ? p.color : DEFAULT_PROFILE.color,
       spot: p.spot === "stand" ? "stand" : "board",
     };
@@ -54,5 +59,12 @@ export function saveProfile(p: Profile) {
 
 /** /play URL 쿼리 (새로고침해도 같은 캐릭터로 재접속되도록 외형까지 담음) */
 export function playSearch(p: Profile): string {
-  return `?${new URLSearchParams({ room: p.roomId, name: p.name, shape: p.shape, color: p.color, spot: p.spot })}`;
+  return `?${new URLSearchParams({
+    room: p.roomId,
+    name: p.name,
+    shape: p.shape,
+    accessory: p.accessory,
+    color: p.color,
+    spot: p.spot,
+  })}`;
 }

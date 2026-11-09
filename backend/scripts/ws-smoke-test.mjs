@@ -23,7 +23,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const display = await connect("display", { role: "display" });
 const alice = await connect("alice", { role: "player", name: "Alice", shape: "box", color: "#4DD9FF" });
-const bob = await connect("bob", { role: "player", name: "Bob", shape: "dragon", color: "#123456" }); // 잘못된 값
+const bob = await connect("bob", { role: "player", name: "Bob", shape: "invalid_shape", color: "#123456" }); // 잘못된 값
 await sleep(200);
 
 for (let i = 0; i < 5; i++) {

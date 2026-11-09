@@ -95,6 +95,7 @@ function SelfPlayer() {
       spawn={spawn.p}
       color={spawn.color}
       shape={spawn.characterShape}
+      accessory={spawn.accessory}
       name={spawn.name}
       alive={alive}
     />

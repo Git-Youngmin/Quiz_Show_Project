@@ -38,7 +38,8 @@ function RemotePlayer({ id }: { id: string }) {
   // 이름/색은 바뀌지 않으므로 원시값만 구독 (위치 변경으로는 리렌더 X)
   const name = useGameStore((s) => s.players[id]?.name ?? "");
   const color = useGameStore((s) => s.players[id]?.color ?? "#ccc");
-  const shape = useGameStore((s) => s.players[id]?.characterShape ?? "capsule");
+  const shape = useGameStore((s) => s.players[id]?.characterShape ?? "cat");
+  const accessory = useGameStore((s) => s.players[id]?.accessory ?? "none");
   const alive = useGameStore((s) => s.players[id]?.alive ?? true);
   const collider = useRef<RapierCollider>(null);
 
@@ -93,7 +94,7 @@ function RemotePlayer({ id }: { id: string }) {
       {/* 외형과 무관하게 동일한 캡슐 충돌체 */}
       <CapsuleCollider ref={collider} args={[CAPSULE_HALF_HEIGHT, CAPSULE_RADIUS]} />
       <group ref={visual}>
-        <Character color={color} shape={shape} name={name} motion={motion} />
+        <Character color={color} shape={shape} accessory={accessory} name={name} motion={motion} />
       </group>
     </RigidBody>
   );
