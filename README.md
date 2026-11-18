@@ -1,4 +1,4 @@
-# Quiz Show Project
+# <img src="frontend/public/favicon.svg" width="40" align="top" alt="" /> Quiz Show Project
 
 **폴가이즈 스타일 3D 서바이벌 + 카훗 스타일 실시간 퀴즈**를 합친 멀티플레이어 웹 게임입니다.
 참가자는 폰이나 PC로 접속해 캐릭터를 움직여 **정답 구역에 서 있어야** 합니다. 시간이 끝나면 오답 구역의 바닥이 꺼지고, 마지막까지 살아남은 1명이 우승합니다.

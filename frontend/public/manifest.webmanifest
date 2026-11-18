@@ -1,0 +1,15 @@
+{
+  "name": "Quiz Show",
+  "short_name": "Quiz Show",
+  "description": "폴가이즈 스타일 3D 서바이벌 + 실시간 O/X·4지선다 퀴즈",
+  "start_url": "/",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#14121f",
+  "theme_color": "#6c5cff",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

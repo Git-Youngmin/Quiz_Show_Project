@@ -17,6 +17,8 @@ const MIME: Record<string, string> = {
   ".ico": "image/x-icon",
   ".wasm": "application/wasm",
   ".woff2": "font/woff2",
+  ".webmanifest": "application/manifest+json",
+  ".mp3": "audio/mpeg",
 };
 
 export function createStaticHandler(dir?: string) {

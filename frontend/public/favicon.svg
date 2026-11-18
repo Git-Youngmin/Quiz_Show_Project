@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Quiz Show 대표 아이콘: 보라→분홍 배경 위의 젤리빈 캐릭터 (하얀 고글 눈) -->
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#6c5cff"/>
+      <stop offset="1" stop-color="#ff5c8a"/>
+    </linearGradient>
+    <linearGradient id="bean" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffe98a"/>
+      <stop offset="1" stop-color="#ffc93d"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#bg)"/>
+  <!-- 바닥 그림자 -->
+  <ellipse cx="32" cy="55" rx="14" ry="3" fill="#000" opacity=".18"/>
+  <!-- 발 -->
+  <ellipse cx="26" cy="52.5" rx="5" ry="3.2" fill="#ffc93d"/>
+  <ellipse cx="38" cy="52.5" rx="5" ry="3.2" fill="#ffc93d"/>
+  <!-- 팔 -->
+  <circle cx="16" cy="36" r="4.2" fill="#ffd34d"/>
+  <circle cx="48" cy="36" r="4.2" fill="#ffd34d"/>
+  <!-- 몸통 (젤리빈) -->
+  <rect x="18" y="10" width="28" height="44" rx="14" fill="url(#bean)"/>
+  <rect x="20.5" y="13" width="6" height="16" rx="3" fill="#fff" opacity=".45"/>
+  <!-- 고글 눈 -->
+  <circle cx="26.5" cy="24" r="6" fill="#fff"/>
+  <circle cx="37.5" cy="24" r="6" fill="#fff"/>
+  <circle cx="27.5" cy="25" r="3" fill="#1a1a2e"/>
+  <circle cx="38.5" cy="25" r="3" fill="#1a1a2e"/>
+  <circle cx="28.6" cy="23.8" r="1" fill="#fff"/>
+  <circle cx="39.6" cy="23.8" r="1" fill="#fff"/>
+  <!-- 볼터치 -->
+  <ellipse cx="22" cy="32.5" rx="2.6" ry="1.5" fill="#ff8fb1" opacity=".9"/>
+  <ellipse cx="42" cy="32.5" rx="2.6" ry="1.5" fill="#ff8fb1" opacity=".9"/>
+  <!-- 웃는 입 -->
+  <path d="M28.5 34.5 Q32 38 35.5 34.5" stroke="#1a1a2e" stroke-width="2" fill="none" stroke-linecap="round"/>
+</svg>
