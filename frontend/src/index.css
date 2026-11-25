@@ -23,6 +23,12 @@ button, input { font: inherit; }
 .badge.closed { background: #7a1f2e; }
 .mono { font-family: ui-monospace, Menlo, monospace; font-size: 13px; }
 table { width: 100%; border-collapse: collapse; }
+/* 라우트 청크/3D 미리보기 로딩 자리 */
+.route-fallback { display: grid; place-items: center; height: 100%; color: #b9b4d9; }
+.avatar-placeholder {
+  border-radius: 20px;
+  background: radial-gradient(circle at 50% 40%, #2a254a 0%, #12101e 100%);
+}
 td, th { text-align: left; padding: 4px 6px; border-bottom: 1px solid #3b3755; }
 
 /* ───── 3D 화면 (/play, /display) ───── */

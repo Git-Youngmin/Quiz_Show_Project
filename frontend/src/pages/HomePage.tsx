@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState, type FormEvent } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   CHARACTER_COLORS,
@@ -10,7 +10,7 @@ import {
   type CharacterAccessory,
   type LobbySpot,
 } from "@quiz/shared";
-import { AvatarPreview } from "../components/AvatarPreview";
+import { prefetchPlayPage } from "../lib/routeChunks";
 import { loadProfile, playSearch, saveProfile, type Profile } from "../lib/profile";
 import { useGameStore } from "../store/useGameStore";
 
@@ -60,9 +60,21 @@ type CustomTab = "character" | "accessory" | "color";
 /**
  * 로비 — 닉네임 / 방 코드 / 20종 캐릭터 & 꾸미기 악세사리 & 색상 선택 후 입장.
  */
+// three.js 미리보기는 별도 청크: 로비 폼은 먼저 뜨고 3D 캐릭터는 뒤따라 로드된다.
+const AvatarPreview = lazy(() =>
+  import("../components/AvatarPreview").then((m) => ({ default: m.AvatarPreview })),
+);
+
+function AvatarPlaceholder({ size }: { size: number }) {
+  return <div className="avatar-3d-preview avatar-placeholder" style={{ width: size, height: size }} aria-hidden />;
+}
+
 export default function HomePage() {
   const navigate = useNavigate();
   const [params] = useSearchParams();
+
+  // 로비에 머무는 동안 /play 청크를 미리 받아 "입장" 직후 대기를 없앤다.
+  useEffect(() => prefetchPlayPage(), []);
 
   const initial = useMemo<Profile>(() => {
     const saved = loadProfile();
@@ -103,7 +115,9 @@ export default function HomePage() {
         <div className="lobby-grid">
           {/* 3D 캐릭터 실시간 회전 미리보기 */}
           <div className="lobby-preview">
-            <AvatarPreview shape={shape} accessory={accessory} color={color} size={140} />
+            <Suspense fallback={<AvatarPlaceholder size={140} />}>
+              <AvatarPreview shape={shape} accessory={accessory} color={color} size={140} />
+            </Suspense>
             <div className="nameplate self lobby-nameplate">{trimmedName || "내 캐릭터"}</div>
           </div>
 
