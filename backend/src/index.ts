@@ -75,6 +75,15 @@ function scheduleRoomCleanup(roomId: string) {
   );
 }
 
+/** 잘못된 %-인코딩(예: "%E0")은 URIError 를 던지므로 null 로 처리 — 미처리 예외로 서버가 죽지 않게 */
+function safeDecode(s: string): string | null {
+  try {
+    return decodeURIComponent(s);
+  } catch {
+    return null;
+  }
+}
+
 // ───────────── 관리자 인증 실패 제한 ─────────────
 
 const authFailures = new Map<string, { count: number; resetAt: number }>();
@@ -209,8 +218,8 @@ server.on("upgrade", (req, socket, head) => {
   if (!ALLOWED_ORIGINS.includes("*") && origin && !ALLOWED_ORIGINS.includes(origin)) {
     return reject(403, "Forbidden");
   }
-  const roomId = decodeURIComponent(match[1]);
-  if (!ROOM_ID_PATTERN.test(roomId)) return reject(400, "Bad Request");
+  const roomId = safeDecode(match[1]);
+  if (roomId === null || !ROOM_ID_PATTERN.test(roomId)) return reject(400, "Bad Request");
 
   // ── 관리자: 비밀번호 검증. 실패하면 연결을 받은 직후 close code 로 끊어 원인을 알려줌 ──
   if (url.searchParams.get("role") === "admin") {
@@ -221,6 +230,7 @@ server.on("upgrade", (req, socket, head) => {
     if (isRateLimited(ip)) {
       closeWith = { code: CLOSE_CODE.TOO_MANY_ATTEMPTS, reason: "too many attempts" };
     } else if (!room?.hasAdminPassword()) {
+      recordAuthFailure(ip); // 없는 방 코드 탐색도 실패로 집계 (방 코드 무차별 탐색 방지)
       closeWith = { code: CLOSE_CODE.ROOM_NOT_FOUND, reason: "room not found" };
     } else if (!room.verifyAdminPassword(password)) {
       recordAuthFailure(ip);
@@ -238,8 +248,9 @@ server.on("upgrade", (req, socket, head) => {
     return;
   }
 
+  // 역할 검증을 방 생성보다 먼저: 잘못된 요청이 정리되지 않는 빈 방을 만들지 않게
+  if (!GameRoom.isValidRole(url.searchParams)) return reject(400, "Bad Request");
   const room = getRoom(roomId);
-  if (!room.isValidRole(url.searchParams)) return reject(400, "Bad Request");
 
   // 정원 초과: 연결을 받은 뒤 4009 로 닫아 클라이언트가 "방이 가득 찼습니다" 를 표시할 수 있게
   const role = url.searchParams.get("role") ?? "player";
@@ -247,10 +258,13 @@ server.on("upgrade", (req, socket, head) => {
     wss.handleUpgrade(req, socket, head, (ws) => ws.close(CLOSE_CODE.ROOM_FULL, "room full"));
     return;
   }
+  // 업그레이드가 실패(소켓이 먼저 끊김 등)해 아무도 들어오지 못한 새 방도 TTL 후 정리되도록 예약.
+  // join 이 일어나면 getRoom/onEmpty 흐름이 다시 관리한다.
+  if (room.isEmpty()) scheduleRoomCleanup(roomId);
 
   wss.handleUpgrade(req, socket, head, (ws) => {
     markAlive(ws);
-    room.join(ws, url.searchParams);
+    getRoom(roomId).join(ws, url.searchParams); // getRoom 이 위에서 예약한 정리 타이머를 해제
   });
 });
 

@@ -25,8 +25,8 @@ const createRoom = (roomId) => fetch(`${HTTP}/api/rooms`, { method: "POST", head
   await createRoom(ROOM);
   const admin = await connect(ROOM, { role: "admin", password: "pw-1234" });
   const display = await connect(ROOM, { role: "display" });
-  const [a, b, c] = [await connect(ROOM, { role: "player", name: "A" }), await connect(ROOM, { role: "player", name: "B" }), await connect(ROOM, { role: "player", name: "C" })];
-  // A: O/A 구역(-x,-z), B: X/B 구역(+x,-z), C: O/C 구역(-x,+z) — 게임 시작 후 이동
+  const [a, b, c, d] = [await connect(ROOM, { role: "player", name: "A" }), await connect(ROOM, { role: "player", name: "B" }), await connect(ROOM, { role: "player", name: "C" }), await connect(ROOM, { role: "player", name: "D" })];
+  // A: O/A 구역(-x,-z), B: X/B 구역(+x,-z), C·D: O/C 구역(-x,+z) — 게임 시작 후 이동
 
   // 잘못된 세트 → 몇 번 문제가 문제인지 알려줌
   send(admin, { type: "admin_start_game", quizzes: [{ quizType: "OX", question: "ok", answer: "O", timeLimitSec: 3 }, { quizType: "MULTIPLE", question: "bad", answer: "B", choices: ["1", "", "3", "4"], timeLimitSec: 3 }] });
@@ -35,7 +35,7 @@ const createRoom = (roomId) => fetch(`${HTTP}/api/rooms`, { method: "POST", head
   await sleep(200);
   check("잘못된 세트 거부 (문제 번호 안내 / 51개 / 빈 세트)", errors(admin).length === 3, errors(admin).join(" | "));
 
-  // 정상 세트: Q1(OX, 정답 O → B 탈락), Q2(4지선다, 정답 A → C 탈락), Q3(남지 않음)
+  // 정상 세트: Q1(OX, 정답 O → B 탈락), 결과 화면에서 C 낙하, Q2(4지선다, 정답 A → D 탈락), Q3(남지 않음)
   const quizzes = [
     { quizType: "OX", question: "Q1", answer: "O", timeLimitSec: 3 },
     { quizType: "MULTIPLE", question: "Q2", answer: "A", choices: ["가", "나", "다", "라"], timeLimitSec: 3 },
@@ -47,6 +47,7 @@ const createRoom = (roomId) => fetch(`${HTTP}/api/rooms`, { method: "POST", head
   send(a, { type: "move", p: [-5, 0.8, -5], r: 0 });
   send(b, { type: "move", p: [5, 0.8, -5], r: 0 });
   send(c, { type: "move", p: [-5, 0.8, 5], r: 0 });
+  send(d, { type: "move", p: [-4, 0.8, 6], r: 0 });
   const g1 = lastGame(display);
   check("게임 시작 → 1번 문제 카운트다운", g1.phase === "countdown" && g1.round === 1 && g1.totalQuestions === 3 && g1.question === "Q1");
   check("다음 문제 내용은 클라이언트에 노출되지 않음", !JSON.stringify(display.log).includes("Q2"));
@@ -77,7 +78,7 @@ const createRoom = (roomId) => fetch(`${HTTP}/api/rooms`, { method: "POST", head
   const reset = display.log.filter((m) => m.type === "round_reset").at(-1);
   check("game_over 후 재시작 → 전원 부활 + 새 게임", reset?.players.every((p) => p.alive) && lastGame(display).round === 1);
   // 1문제 세트에서 2명 이상 생존 → 문제 소진으로 game_over (공동 생존, winnerId=null)
-  send(a, { type: "move", p: [-5, 0.8, -5], r: 0 }); send(b, { type: "move", p: [-6, 0.8, 5], r: 0 }); send(c, { type: "move", p: [5, 0.8, 5], r: 0 });
+  send(a, { type: "move", p: [-5, 0.8, -5], r: 0 }); send(b, { type: "move", p: [-6, 0.8, 5], r: 0 }); send(c, { type: "move", p: [5, 0.8, 5], r: 0 }); send(d, { type: "move", p: [-5, 0.8, -4], r: 0 });
   await sleep(3000 + 3000 + 3000 + 4500 + 300);
   const end = lastGame(display);
   check("문제 소진 + 여러 명 생존 → game_over (공동 생존)", end.phase === "game_over" && end.winnerId === null && end.lastEliminatedCount === 1, `phase=${end.phase}`);
@@ -97,7 +98,33 @@ const createRoom = (roomId) => fetch(`${HTTP}/api/rooms`, { method: "POST", head
   const lateMid = await connect(ROOM, { role: "player", name: "MidGame" });
   const meMid = lateMid.log.find((m) => m.type === "welcome").players.find((p) => p.id === lateMid.id);
   check("문제 진행 중 입장 → 관전으로 입장", meMid.alive === false);
-  for (const x of [admin, display, a, b, c, lateOver, lateMid]) x.ws.close();
+  for (const x of [admin, display, a, b, c, d, lateOver, lateMid]) x.ws.close();
+}
+
+// ───────────── 1-b. 라운드 결과 화면에서 생존자가 1명만 남으면 즉시 game_over ─────────────
+{
+  const ROOM = `early-${Date.now()}`;
+  await createRoom(ROOM);
+  const admin = await connect(ROOM, { role: "admin", password: "pw-1234" });
+  const display = await connect(ROOM, { role: "display" });
+  const [a, b] = [await connect(ROOM, { role: "player", name: "A" }), await connect(ROOM, { role: "player", name: "B" })];
+  send(admin, {
+    type: "admin_start_game",
+    quizzes: [
+      { quizType: "OX", question: "E1", answer: "O", timeLimitSec: 3 },
+      { quizType: "OX", question: "E2", answer: "O", timeLimitSec: 3 },
+    ],
+  });
+  await sleep(200);
+  send(a, { type: "move", p: [-5, 0.8, -5], r: 0 });
+  send(b, { type: "move", p: [-5, 0.8, 5], r: 0 });
+  await sleep(3000 + 3000 + 3000 + 4500 + 300);
+  check("둘 다 정답 → round_standings", lastGame(display).phase === "round_standings", `phase=${lastGame(display).phase}`);
+  send(b, { type: "fell" });
+  await sleep(200);
+  const g = lastGame(display);
+  check("결과 화면 중 낙하로 1명 남음 → 즉시 game_over (우승자 A)", g.phase === "game_over" && g.winnerId === a.id, `phase=${g.phase}`);
+  for (const x of [admin, display, a, b]) x.ws.close();
 }
 
 // ───────────── 2. 정원 100명 ─────────────

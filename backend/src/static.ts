@@ -3,7 +3,7 @@
  * 의존성 없이 node:fs 만 사용. 디렉토리가 없으면 null 을 반환해 비활성화된다.
  */
 import { createReadStream, existsSync, statSync } from "node:fs";
-import { extname, join, normalize, resolve } from "node:path";
+import { extname, join, normalize, resolve, sep } from "node:path";
 import type { ServerResponse } from "node:http";
 
 const MIME: Record<string, string> = {
@@ -29,10 +29,25 @@ export function createStaticHandler(dir?: string) {
   const indexHtml = join(root, "index.html");
 
   return (pathname: string, res: ServerResponse) => {
+    // 잘못된 %-인코딩은 decodeURIComponent 가 예외를 던짐 → 400 (미처리 예외로 프로세스가 죽지 않게)
+    let decoded: string;
+    try {
+      decoded = decodeURIComponent(pathname);
+    } catch {
+      res.writeHead(400).end("Bad Request");
+      return;
+    }
     // 경로 탈출(../) 방지
-    const safe = normalize(decodeURIComponent(pathname)).replace(/^(\.\.[/\\])+/, "");
+    const safe = normalize(decoded).replace(/^(\.\.[/\\])+/, "");
     let file = join(root, safe);
-    if (!file.startsWith(root) || !existsSync(file) || statSync(file).isDirectory()) {
+    const exists = file.startsWith(root + sep) && existsSync(file) && !statSync(file).isDirectory();
+    if (!exists) {
+      // 해시가 붙은 빌드 산출물이 없으면(재배포 후 옛 청크 요청) index.html 대신 404:
+      // HTML 을 JS 로 받으면 동적 import 가 모호하게 실패하므로, 클라이언트가 명확히 감지해 새로고침하게 한다.
+      if (safe.replace(/\\/g, "/").startsWith("/assets/")) {
+        res.writeHead(404, { "Cache-Control": "no-cache" }).end("Not found");
+        return;
+      }
       file = indexHtml; // SPA: /play, /admin 등은 index.html
     }
     const isAsset = file.includes(`${join(root, "assets")}`);

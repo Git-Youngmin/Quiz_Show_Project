@@ -116,7 +116,7 @@ export class GameRoom {
   // ───────────── 접속 처리 ─────────────
 
   /** 업그레이드 전에 입장 가능 여부 확인 (잘못된 role) */
-  isValidRole(params: URLSearchParams): boolean {
+  static isValidRole(params: URLSearchParams): boolean {
     return parseRole(params.get("role")) !== null;
   }
 
@@ -223,6 +223,7 @@ export class GameRoom {
         // 게임 중(문제 진행·라운드 결과)에 보드 밖으로 떨어지면 탈락. 로비(대기·종료) 중 낙하는 관전석 이동일 뿐
         if (session.player?.alive && !isLobbyPhase(this.game.phase)) {
           this.eliminate([session.player.id]);
+          this.endIfDecidedBetweenRounds();
         }
         break;
 
@@ -478,6 +479,17 @@ export class GameRoom {
     this.phaseTimer = null;
   }
 
+  /**
+   * 라운드 결과(round_standings) 화면에서 생존자가 낙하·이탈로 1명 이하가 되면 바로 게임 종료.
+   * (그대로 두면 아무도 없는 보드로 다음 문제가 진행됨) 문제 진행 중에는 elimination 단계가 판정한다.
+   */
+  private endIfDecidedBetweenRounds() {
+    if (this.game.phase !== "round_standings") return;
+    const survivors = this.playerList().filter((p) => p.alive);
+    if (survivors.length > 1) return;
+    this.setPhase({ phase: "game_over", winnerId: survivors.length === 1 ? survivors[0].id : null }, null);
+  }
+
   private eliminate(ids: string[]) {
     const out: string[] = [];
     for (const s of this.sessions.values()) {
@@ -520,6 +532,7 @@ export class GameRoom {
     if (session.player) {
       this.dirty.delete(session.player.id);
       this.broadcast({ type: "player_left", id: session.player.id });
+      if (session.player.alive) this.endIfDecidedBetweenRounds();
     }
     if (this.sessions.size === 0) this.onEmpty();
   }
