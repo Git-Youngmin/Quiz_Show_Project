@@ -139,11 +139,20 @@ const createRoom = (roomId) => fetch(`${HTTP}/api/rooms`, { method: "POST", head
   check("101번째 참가자 → 4009 로 거절", extra.closeCode === 4009 && !extra.id, `close=${extra.closeCode}`);
   const display = await connect(ROOM, { role: "display" });
   check("송출 화면은 정원과 무관하게 접속", !!display.id);
-  players[0].ws.close();
+  // 연결만 끊긴 자리는 재접속 대기 동안 예약 → 새 참가자는 아직 못 들어옴, 원래 주인은 토큰으로 복귀 가능
+  const dropped = players[1];
+  dropped.ws.close();
+  await sleep(200);
+  const blocked = await connect(ROOM, { role: "player", name: "TooEarly" });
+  check("끊긴 자리는 재접속 대기 중 예약 → 새 참가자 4009", blocked.closeCode === 4009, `close=${blocked.closeCode}`);
+  const back = await connect(ROOM, { role: "player", name: "P-back", resume: dropped.log.find((m) => m.type === "welcome").resumeToken });
+  check("정원이 꽉 차도 원래 주인은 토큰으로 복귀", back.id === dropped.id);
+  // 나가기(leave)로 나가면 자리가 바로 빔
+  send(players[0], { type: "leave" });
   await sleep(200);
   const again = await connect(ROOM, { role: "player", name: "Retry" });
-  check("한 명이 나가면 다시 입장 가능", !!again.id);
-  for (const x of [...players, display, again]) x.ws.close();
+  check("한 명이 나가면(leave) 다시 입장 가능", !!again.id);
+  for (const x of [...players, display, again, back]) x.ws.close();
 }
 
 console.log(failed === 0 ? "✅ PASS" : `❌ FAIL (${failed})`);

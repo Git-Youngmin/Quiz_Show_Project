@@ -254,7 +254,8 @@ server.on("upgrade", (req, socket, head) => {
 
   // 정원 초과: 연결을 받은 뒤 4009 로 닫아 클라이언트가 "방이 가득 찼습니다" 를 표시할 수 있게
   const role = url.searchParams.get("role") ?? "player";
-  if (role === "player" && room.isFull()) {
+  // 재접속 토큰으로 기존 자리에 돌아오는 경우는 정원 검사 면제 (자리가 이미 예약돼 있음)
+  if (role === "player" && room.isFull() && !room.canResume(url.searchParams.get("resume"))) {
     wss.handleUpgrade(req, socket, head, (ws) => ws.close(CLOSE_CODE.ROOM_FULL, "room full"));
     return;
   }

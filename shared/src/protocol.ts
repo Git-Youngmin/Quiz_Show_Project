@@ -218,7 +218,9 @@ export type ClientMessage =
   /** 관리자: 진행 중단 + 전원 부활 + 재배치 (로비로) */
   | { type: "admin_reset" }
   /** 탈락자: 관전석의 투척 발판(pad 번호)을 밟아 방해물 발사 요청 */
-  | { type: "throw_item"; pad: number };
+  | { type: "throw_item"; pad: number }
+  /** 참가자: 스스로 나감 — 재접속 대기 없이 즉시 방에서 제거 */
+  | { type: "leave" };
 
 /** 퀴즈 세트의 문제 하나 */
 export type QuizItem =
@@ -241,6 +243,10 @@ export type ServerMessage =
       serverTime: number;
       /** 버튼별로 다시 쓸 수 있는 서버 시각 (늦게 들어온 사람도 쿨타임 상태를 보도록) */
       padReadyAt: number[];
+      /** 참가자 전용: 연결이 끊겼을 때 같은 자리로 돌아오기 위한 비밀 토큰 (?resume= 로 전달) */
+      resumeToken?: string;
+      /** 재접속 토큰으로 기존 자리에 복귀했으면 true */
+      resumed?: boolean;
     }
   | { type: "player_joined"; player: PlayerInfo }
   | { type: "player_left"; id: string }
@@ -468,7 +474,15 @@ export const CLOSE_CODE = {
   TOO_MANY_ATTEMPTS: 4029,
   /** 참가자 정원(MAX_PLAYERS_PER_ROOM) 초과 */
   ROOM_FULL: 4009,
+  /** 같은 재접속 토큰으로 다른 곳(다른 탭 등)에서 접속해 이 연결이 대체됨 */
+  SESSION_REPLACED: 4010,
 } as const;
+
+/**
+ * 연결이 끊긴 참가자 자리를 보관하는 시간. 이 안에 재접속 토큰(resume)으로 다시 들어오면
+ * 같은 id·생존 상태·위치로 복귀한다 (게임 중 잠깐 끊겨도 관전자가 되지 않음).
+ */
+export const RESUME_GRACE_MS = 30_000;
 
 /** POST /api/rooms 요청 본문 — 방 생성 + 방장 비밀번호 설정 */
 export interface CreateRoomRequest {

@@ -47,6 +47,7 @@ function PlayScene() {
 
   // 정원(100명) 초과로 서버가 4009 로 끊은 경우
   if (fatal === CLOSE_CODE.ROOM_FULL) return <RoomFull />;
+  if (fatal === CLOSE_CODE.SESSION_REPLACED) return <SessionReplaced />;
 
   return (
     <KeyboardControls map={KEYBOARD_MAP}>
@@ -101,6 +102,26 @@ function SelfPlayer() {
       name={spawn.name}
       alive={alive}
     />
+  );
+}
+
+/** 같은 자리(재접속 토큰)로 다른 탭·기기에서 접속해 이 화면의 연결이 넘어간 경우 */
+function SessionReplaced() {
+  const [params] = useSearchParams();
+  return (
+    <div className="room-full">
+      <div style={{ fontSize: 56 }}>📱</div>
+      <h1>다른 화면에서 접속했어요</h1>
+      <p>
+        같은 캐릭터로 다른 탭이나 기기에서 접속해서 이 화면의 연결이 끊겼어요.
+        <br />이 화면에서 계속하려면 로비에서 다시 입장해 주세요.
+      </p>
+      <div className="row" style={{ justifyContent: "center" }}>
+        <Link className="btn" to={`/?${new URLSearchParams({ room: params.get("room") || "lobby" })}`}>
+          로비로
+        </Link>
+      </div>
+    </div>
   );
 }
 

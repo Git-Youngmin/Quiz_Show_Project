@@ -22,6 +22,8 @@ import {
   isOnThrowPad,
   throwOrigin,
   CHARACTER_COLORS,
+  CLOSE_CODE,
+  RESUME_GRACE_MS,
   FELL_Y,
   INITIAL_GAME_STATE,
   MAX_CHOICE_LENGTH,
@@ -58,13 +60,30 @@ interface Session {
   role: Role;
   /** role === "player" 일 때만 존재 */
   player?: PlayerInfo;
+  /** role === "player" 일 때만: 재접속 시 같은 자리로 돌아오는 비밀 토큰 */
+  resumeToken?: string;
 }
+
+/** 연결이 끊겨 재접속을 기다리는 참가자 자리 */
+interface Ghost {
+  player: PlayerInfo;
+  timer: NodeJS.Timeout;
+}
+
+/** 재접속 대기 시간 (테스트에서 짧게 바꿀 수 있도록 환경변수 RESUME_GRACE_MS 로 덮어쓰기 가능) */
+const GRACE_MS = Number(process.env.RESUME_GRACE_MS) || RESUME_GRACE_MS;
 
 /** 스폰 반경 — 보드(22×22) 가운데 쪽에 모이도록 */
 const SPAWN_RADIUS = 5;
 
 export class GameRoom {
   private sessions = new Map<WebSocket, Session>();
+  /**
+   * 연결이 끊긴 참가자 (재접속 토큰 → 자리). RESUME_GRACE_MS 동안 보관하며,
+   * 그동안에도 게임 판정(구역·탈락·생존자 수)에는 마지막 위치 기준으로 포함된다.
+   * 다른 참가자 화면에서는 player_left 로 사라졌다가, 복귀하면 player_joined 로 다시 나타난다.
+   */
+  private ghosts = new Map<string, Ghost>();
   /** 다음 스냅샷에 포함할 플레이어 id */
   private dirty = new Set<string>();
   private flushTimer: NodeJS.Timeout | null = null;
@@ -122,15 +141,29 @@ export class GameRoom {
 
   /** 참가자 정원 초과 여부 (관리자/송출 화면은 정원에 포함되지 않음) */
   isFull(): boolean {
-    return this.playerCount() >= MAX_PLAYERS_PER_ROOM;
+    return this.playerCount() + this.ghosts.size >= MAX_PLAYERS_PER_ROOM;
+  }
+
+  /** 이 토큰으로 기존 자리에 복귀할 수 있는지 (정원 검사 면제용) */
+  canResume(token: string | null): boolean {
+    if (!token) return false;
+    if (this.ghosts.has(token)) return true;
+    for (const s of this.sessions.values()) if (s.resumeToken === token) return true;
+    return false;
   }
 
   join(ws: WebSocket, params: URLSearchParams) {
     const role = parseRole(params.get("role")) ?? "player";
-    const id = crypto.randomUUID();
+    const resumed = role === "player" ? this.takeResumable(params.get("resume")) : null;
+    const id = resumed?.player.id ?? crypto.randomUUID();
     const session: Session = { id, role };
 
-    if (role === "player") {
+    if (resumed) {
+      // 끊기기 전 자리 그대로 (id·생존 여부·위치·꾸미기 유지)
+      session.player = resumed.player;
+      session.resumeToken = resumed.token;
+    } else if (role === "player") {
+      session.resumeToken = randomBytes(16).toString("hex");
       const shape = params.get("shape");
       const color = params.get("color");
       const accessory = params.get("accessory");
@@ -167,10 +200,35 @@ export class GameRoom {
       game: this.game,
       serverTime: Date.now(),
       padReadyAt: this.padReadyAt,
+      ...(session.resumeToken ? { resumeToken: session.resumeToken, resumed: resumed !== null } : {}),
     });
     if (session.player) {
       this.broadcast({ type: "player_joined", player: session.player }, ws);
     }
+  }
+
+  /**
+   * 재접속 토큰에 해당하는 자리를 꺼낸다.
+   *  - 끊긴 자리(ghost): 보관 타이머 해제 후 반환
+   *  - 아직 살아 있는 것으로 보이는 연결(모바일 네트워크 전환 등으로 서버가 끊김을 늦게 알아챈 경우):
+   *    옛 연결을 SESSION_REPLACED 로 닫고 그 자리를 넘겨받음
+   */
+  private takeResumable(token: string | null): { token: string; player: PlayerInfo } | null {
+    if (!token) return null;
+    const ghost = this.ghosts.get(token);
+    if (ghost) {
+      clearTimeout(ghost.timer);
+      this.ghosts.delete(token);
+      return { token, player: ghost.player };
+    }
+    for (const [oldWs, s] of this.sessions) {
+      if (s.resumeToken !== token || !s.player) continue;
+      this.sessions.delete(oldWs); // close 이벤트가 와도 removeSession 이 무시하도록 먼저 제거
+      this.dirty.delete(s.player.id);
+      oldWs.close(CLOSE_CODE.SESSION_REPLACED, "session replaced");
+      return { token, player: s.player };
+    }
+    return null;
   }
 
   isEmpty() {
@@ -179,6 +237,8 @@ export class GameRoom {
 
   dispose() {
     this.clearPhaseTimer();
+    for (const g of this.ghosts.values()) clearTimeout(g.timer);
+    this.ghosts.clear();
     if (this.flushTimer) clearTimeout(this.flushTimer);
     this.flushTimer = null;
     for (const ws of this.sessions.keys()) ws.close(1001, "room closed");
@@ -229,6 +289,12 @@ export class GameRoom {
 
       case "throw_item":
         this.throwItem(ws, session, msg.pad);
+        break;
+
+      case "leave":
+        // 스스로 나감: 재접속 대기 없이 바로 제거 (나가기 버튼·뒤로가기)
+        this.removeSession(ws, { leaving: true });
+        ws.close(1000, "left");
         break;
 
       case "admin_start_game":
@@ -315,11 +381,10 @@ export class GameRoom {
 
   /** 전원 부활 + 새 스폰 위치 (클라이언트는 round_reset 으로 내 캐릭터를 새 위치에 재생성) */
   private revivePlayers() {
-    for (const s of this.sessions.values()) {
-      if (!s.player) continue;
-      s.player.alive = true;
-      s.player.p = randomSpawn();
-      s.player.r = 0;
+    for (const pl of this.allPlayers()) {
+      pl.alive = true;
+      pl.p = randomSpawn();
+      pl.r = 0;
     }
     this.dirty.clear();
     this.broadcast({ type: "round_reset", players: this.playerList() });
@@ -398,9 +463,8 @@ export class GameRoom {
       case "question_active": {
         // 시간 종료 → 정답 공개. 이 시점엔 벽이 이미 올라와 있으므로 구역을 확정(lock)
         this.lockedZones.clear();
-        for (const s of this.sessions.values()) {
-          const pl = s.player;
-          if (pl?.alive) this.lockedZones.set(pl.id, zoneAt(this.game.quizType, pl.p[0], pl.p[2]));
+        for (const pl of this.allPlayers()) {
+          if (pl.alive) this.lockedZones.set(pl.id, zoneAt(this.game.quizType, pl.p[0], pl.p[2]));
         }
         this.setPhase({ phase: "reveal", answer: this.secretAnswer }, PHASE_DURATION_MS.reveal);
         break;
@@ -412,9 +476,8 @@ export class GameRoom {
         const answer = this.secretAnswer ?? ZONES[type][0];
         const droppedZones = ZONES[type].filter((z) => z !== answer);
         const losers: string[] = [];
-        for (const s of this.sessions.values()) {
-          const pl = s.player;
-          if (!pl?.alive) continue;
+        for (const pl of this.allPlayers()) {
+          if (!pl.alive) continue;
           // 확정된 구역 기준 (벽이 올라온 뒤 순간이동 같은 조작은 무시).
           // reveal 도중 난입 등 lock 이 없으면 현재 위치로 판정
           const zone = this.lockedZones.get(pl.id) ?? zoneAt(type, pl.p[0], pl.p[2]);
@@ -429,7 +492,7 @@ export class GameRoom {
       case "elimination": {
         this.secretAnswer = null;
         this.lockedZones.clear();
-        const survivors = this.playerList().filter((p) => p.alive);
+        const survivors = this.allPlayers().filter((p) => p.alive);
         const outOfQuestions = this.game.round >= this.quizzes.length;
         const common = {
           droppedZones: [],
@@ -485,17 +548,17 @@ export class GameRoom {
    */
   private endIfDecidedBetweenRounds() {
     if (this.game.phase !== "round_standings") return;
-    const survivors = this.playerList().filter((p) => p.alive);
+    const survivors = this.allPlayers().filter((p) => p.alive);
     if (survivors.length > 1) return;
     this.setPhase({ phase: "game_over", winnerId: survivors.length === 1 ? survivors[0].id : null }, null);
   }
 
   private eliminate(ids: string[]) {
     const out: string[] = [];
-    for (const s of this.sessions.values()) {
-      if (s.player?.alive && ids.includes(s.player.id)) {
-        s.player.alive = false;
-        out.push(s.player.id);
+    for (const pl of this.allPlayers()) {
+      if (pl.alive && ids.includes(pl.id)) {
+        pl.alive = false;
+        out.push(pl.id);
       }
     }
     this.eliminatedThisRound += out.length;
@@ -525,16 +588,38 @@ export class GameRoom {
 
   // ───────────── 헬퍼 ─────────────
 
-  private removeSession(ws: WebSocket) {
+  /**
+   * 연결 종료 처리. 참가자가 스스로 나간 게 아니면(네트워크 끊김 등) RESUME_GRACE_MS 동안
+   * 자리를 보관해 같은 토큰으로 복귀할 수 있게 한다.
+   */
+  private removeSession(ws: WebSocket, { leaving = false } = {}) {
     const session = this.sessions.get(ws);
     if (!session) return;
     this.sessions.delete(ws);
-    if (session.player) {
-      this.dirty.delete(session.player.id);
-      this.broadcast({ type: "player_left", id: session.player.id });
-      if (session.player.alive) this.endIfDecidedBetweenRounds();
+    const pl = session.player;
+    if (pl) {
+      this.dirty.delete(pl.id);
+      this.broadcast({ type: "player_left", id: pl.id });
+      const token = session.resumeToken;
+      if (!leaving && token) {
+        const timer = setTimeout(() => {
+          this.ghosts.delete(token);
+          if (pl.alive) this.endIfDecidedBetweenRounds();
+        }, GRACE_MS);
+        timer.unref?.();
+        this.ghosts.set(token, { player: pl, timer });
+      } else if (pl.alive) {
+        this.endIfDecidedBetweenRounds();
+      }
     }
     if (this.sessions.size === 0) this.onEmpty();
+  }
+
+  /** 접속 중인 참가자 + 재접속 대기 중인 자리 (게임 판정용) */
+  private allPlayers(): PlayerInfo[] {
+    const list = this.playerList();
+    for (const g of this.ghosts.values()) list.push(g.player);
+    return list;
   }
 
   private playerCount(): number {

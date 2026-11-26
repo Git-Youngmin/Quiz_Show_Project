@@ -149,6 +149,28 @@ let lastSent: { p: Vec3; r: number } | null = null;
 let pendingMove: { p: Vec3; r: number } | null = null;
 let pendingMoveTimer: ReturnType<typeof setTimeout> | null = null;
 
+// ───────────── 재접속 토큰 ─────────────
+// 탭 단위(sessionStorage)로 방별 토큰을 보관 → 네트워크 끊김·새로고침 후에도 같은 자리로 복귀.
+// 나가기/페이지 이탈(disconnect)이나 다른 곳에서 접속해 대체되면 지운다.
+const resumeKey = (roomId: string) => `quiz:resume:${roomId}`;
+function loadResumeToken(roomId: string): string | null {
+  try {
+    return sessionStorage.getItem(resumeKey(roomId));
+  } catch {
+    return null;
+  }
+}
+function saveResumeToken(roomId: string, token: string | null) {
+  try {
+    if (token) sessionStorage.setItem(resumeKey(roomId), token);
+    else sessionStorage.removeItem(resumeKey(roomId));
+  } catch {
+    /* 저장소 차단 시: 같은 페이지 안의 재연결만 메모리로 처리 */
+  }
+}
+/** 저장소가 막힌 환경을 위한 메모리 사본 (방 id → 토큰) */
+const memoryResume = new Map<string, string>();
+
 function resolveWsUrl({ roomId, role, name, shape, accessory, color, password }: ConnectOptions): string {
   // 별도 배포: VITE_WS_BASE=wss://서버주소 / 기본: 현재 host (개발 시 Vite 프록시 → 8787, 배포 시 같은 Node 서버)
   const base =
@@ -160,6 +182,10 @@ function resolveWsUrl({ roomId, role, name, shape, accessory, color, password }:
   if (accessory) q.set("accessory", accessory);
   if (color) q.set("color", color);
   if (password) q.set("password", password);
+  if (role === "player") {
+    const token = loadResumeToken(roomId) ?? memoryResume.get(roomId);
+    if (token) q.set("resume", token);
+  }
   return `${base.replace(/\/$/, "")}${wsPath(roomId)}?${q}`;
 }
 
@@ -186,6 +212,10 @@ export const useGameStore = create<StoreState>()((set, get) => {
   function handleMessage(msg: ServerMessage) {
     switch (msg.type) {
       case "welcome": {
+        if (msg.resumeToken) {
+          saveResumeToken(msg.roomId, msg.resumeToken);
+          memoryResume.set(msg.roomId, msg.resumeToken);
+        }
         const players: Record<string, ClientPlayer> = {};
         for (const p of msg.players) players[p.id] = toClientPlayer(p);
         set({
@@ -334,6 +364,11 @@ export const useGameStore = create<StoreState>()((set, get) => {
 
       if (manualClose) return;
       if (FATAL_CLOSE_CODES.includes(e.code)) {
+        if (e.code === CLOSE_CODE.SESSION_REPLACED && connectOpts) {
+          // 다른 탭/기기가 이 자리를 가져감 → 이 탭은 토큰을 버리고 재연결하지 않음
+          saveResumeToken(connectOpts.roomId, null);
+          memoryResume.delete(connectOpts.roomId);
+        }
         // 비밀번호 오류 등: 같은 정보로 재시도해도 실패하므로 재연결 중단
         connectOpts = null;
         set({ status: "idle", fatalCloseCode: e.code, lastError: null });
@@ -418,8 +453,17 @@ export const useGameStore = create<StoreState>()((set, get) => {
       manualClose = true;
       clearTimers();
       const ws = socket;
+      // 실제로 입장(welcome)한 뒤에만 토큰 폐기 — StrictMode 의 mount→cleanup→mount 에서
+      // 접속 전 cleanup 이 새로고침 복귀용 토큰을 지우지 않게
+      const leftRoom = connectOpts?.role === "player" && get().selfId ? connectOpts.roomId : null;
       socket = null;
       connectOpts = null;
+      // 스스로 나감 → 서버가 재접속 대기 없이 바로 자리 정리, 토큰도 폐기
+      if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ type: "leave" } satisfies ClientMessage));
+      if (leftRoom) {
+        saveResumeToken(leftRoom, null);
+        memoryResume.delete(leftRoom);
+      }
       ws?.close(1000, "client disconnect");
       set({
         status: "idle",
