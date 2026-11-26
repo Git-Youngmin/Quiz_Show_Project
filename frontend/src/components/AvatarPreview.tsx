@@ -1,4 +1,5 @@
 import { useRef } from "react";
+import { usePrefersReducedMotion } from "../lib/usePrefersReducedMotion";
 import { Canvas, useFrame } from "@react-three/fiber";
 import type { Group } from "three";
 import type { CharacterShape, CharacterAccessory } from "@quiz/shared";
@@ -8,21 +9,24 @@ function RotatingModel({
   shape,
   accessory,
   color,
+  still,
 }: {
   shape: CharacterShape;
   accessory?: CharacterAccessory;
   color: string;
+  /** "동작 줄이기" 설정 시 회전 없이 비스듬한 정지 자세 */
+  still: boolean;
 }) {
   const group = useRef<Group>(null);
 
   useFrame((_, delta) => {
-    if (group.current) {
+    if (group.current && !still) {
       group.current.rotation.y += delta * 0.9;
     }
   });
 
   return (
-    <group ref={group} position={[0, -0.4, 0]}>
+    <group ref={group} position={[0, -0.4, 0]} rotation={still ? [0, -0.5, 0] : undefined}>
       <Character color={color} shape={shape} accessory={accessory} name="" />
     </group>
   );
@@ -43,6 +47,7 @@ export function AvatarPreview({
   color: string;
   size?: number;
 }) {
+  const reduceMotion = usePrefersReducedMotion();
   return (
     <div
       className="avatar-3d-preview"
@@ -58,6 +63,7 @@ export function AvatarPreview({
       aria-hidden
     >
       <Canvas
+        frameloop={reduceMotion ? "demand" : "always"}
         camera={{ position: [0, 0.2, 2.3], fov: 45 }}
         style={{ width: "100%", height: "100%" }}
         gl={{ alpha: true, antialias: true }}
@@ -65,7 +71,7 @@ export function AvatarPreview({
         <ambientLight intensity={1.6} />
         <directionalLight position={[2.5, 4, 3]} intensity={2.2} />
         <directionalLight position={[-2.5, 1, -2]} intensity={0.8} />
-        <RotatingModel shape={shape} accessory={accessory} color={color} />
+        <RotatingModel shape={shape} accessory={accessory} color={color} still={reduceMotion} />
       </Canvas>
     </div>
   );

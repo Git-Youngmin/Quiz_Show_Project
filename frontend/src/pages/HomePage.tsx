@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useMemo, useState, type FormEvent } from "re
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   CHARACTER_COLORS,
+  CHARACTER_COLOR_NAMES,
   ANIMAL_CHARACTERS,
   LEGACY_SHAPES,
   CHARACTER_ACCESSORIES,
@@ -11,6 +12,7 @@ import {
   type LobbySpot,
 } from "@quiz/shared";
 import { prefetchPlayPage } from "../lib/routeChunks";
+import { canAutoFocus } from "../lib/autoFocus";
 import { loadProfile, playSearch, saveProfile, type Profile } from "../lib/profile";
 import { useGameStore } from "../store/useGameStore";
 
@@ -126,35 +128,46 @@ export default function HomePage() {
               <span>닉네임</span>
               <input
                 className="input"
+                name="nickname"
                 value={name}
                 maxLength={MAX_NAME_LENGTH}
                 placeholder="최대 16자"
                 autoComplete="nickname"
                 onChange={(e) => setName(e.target.value)}
-                autoFocus={!initial.name}
+                autoFocus={!initial.name && canAutoFocus()}
               />
             </label>
             <label className="field">
               <span>방 코드</span>
               <input
                 className="input mono"
+                name="room"
                 value={roomId}
                 maxLength={32}
                 placeholder="예) lobby"
                 autoCapitalize="off"
+                autoComplete="off"
+                spellCheck={false}
                 onChange={(e) => setRoomId(e.target.value.trim())}
-                aria-invalid={!roomValid}
+                aria-invalid={roomId !== "" && !roomValid}
+                aria-describedby="room-error"
               />
-              {!roomValid && roomId && <small className="field-error">영문, 숫자, -, _ 만 쓸 수 있어요</small>}
+              <small id="room-error" className="field-error" aria-live="polite">
+                {!roomValid && roomId ? "영문, 숫자, -, _ 만 쓸 수 있어요" : ""}
+              </small>
             </label>
           </div>
         </div>
 
         {/* 커스터마이징 탭 */}
         <fieldset className="picker">
-          <div className="character-tabs" role="tablist">
+          <legend className="sr-only">캐릭터 꾸미기</legend>
+          <div className="character-tabs" role="tablist" aria-label="꾸미기 항목">
             <button
               type="button"
+              role="tab"
+              aria-selected={activeTab === "character"}
+              aria-controls="custom-panel"
               className={`character-tab ${activeTab === "character" ? "active" : ""}`}
               onClick={() => setActiveTab("character")}
             >
@@ -162,6 +175,9 @@ export default function HomePage() {
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={activeTab === "accessory"}
+              aria-controls="custom-panel"
               className={`character-tab ${activeTab === "accessory" ? "active" : ""}`}
               onClick={() => setActiveTab("accessory")}
             >
@@ -169,6 +185,9 @@ export default function HomePage() {
             </button>
             <button
               type="button"
+              role="tab"
+              aria-selected={activeTab === "color"}
+              aria-controls="custom-panel"
               className={`character-tab ${activeTab === "color" ? "active" : ""}`}
               onClick={() => setActiveTab("color")}
             >
@@ -176,6 +195,7 @@ export default function HomePage() {
             </button>
           </div>
 
+          <div id="custom-panel" role="tabpanel">
           {/* 1. 캐릭터 선택 패널 */}
           {activeTab === "character" && (
             <div className="character-grid-20">
@@ -233,13 +253,15 @@ export default function HomePage() {
                   type="button"
                   className={`color-swatch ${color === c ? "selected" : ""}`}
                   style={{ background: c }}
-                  aria-label={`색상 ${c}`}
+                  aria-label={CHARACTER_COLOR_NAMES[c]}
+                  title={CHARACTER_COLOR_NAMES[c]}
                   aria-pressed={color === c}
                   onClick={() => setColor(c)}
                 />
               ))}
             </div>
           )}
+          </div>
         </fieldset>
 
         {/* 입장 위치 */}
@@ -267,9 +289,12 @@ export default function HomePage() {
           <small className="spot-note">어디서 기다리든 게임이 시작되면 모두 보드로 이동해 참가해요.</small>
         </fieldset>
 
-        <button className="btn lobby-enter" type="submit" disabled={!canEnter}>
+        <button className="btn lobby-enter" type="submit" disabled={!canEnter} aria-describedby="enter-hint">
           입장하기
         </button>
+        <p id="enter-hint" className="field-hint" aria-live="polite">
+          {canEnter ? "" : !trimmedName ? "닉네임을 입력하면 입장할 수 있어요" : "올바른 방 코드를 입력해 주세요"}
+        </p>
 
         <nav className="lobby-links">
           <Link to={`/admin?room=${encodeURIComponent(roomId)}`}>관리자 패널</Link>

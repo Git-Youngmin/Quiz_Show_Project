@@ -775,10 +775,13 @@ export function Character({
         )}
       </group>
 
-      {/* 이름표 */}
-      <Html position={[0, CHARACTER_CENTER_Y + 0.45, 0]} center zIndexRange={[10, 0]}>
-        <div className={`nameplate${isSelf ? " self" : ""}`}>{name}</div>
-      </Html>
+      {/* 이름표 — 이름이 없으면(로비 미리보기) 생략: 빈 이름표 DOM 을 만들지 않고,
+          미리보기 Canvas 가 페이지 이동으로 사라질 때 Html 정리 순서 오류(removeChild)도 피한다 */}
+      {name && (
+        <Html position={[0, CHARACTER_CENTER_Y + 0.45, 0]} center zIndexRange={[10, 0]}>
+          <div className={`nameplate${isSelf ? " self" : ""}`}>{name}</div>
+        </Html>
+      )}
     </group>
   );
 }

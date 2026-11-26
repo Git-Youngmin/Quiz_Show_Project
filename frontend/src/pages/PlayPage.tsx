@@ -16,11 +16,13 @@ import { VirtualJoystick, shouldShowJoystick } from "../game/input/VirtualJoysti
 import { World } from "../game/World";
 import { LocalPlayer } from "../game/LocalPlayer";
 import { RemotePlayers } from "../game/RemotePlayers";
+import { useGameViewport } from "../lib/useGameViewport";
 import { CAMERA_OFFSET, PHYSICS_GRAVITY } from "../game/constants";
 
 /** 참가자 3D 뷰: PC(WASD/방향키 + Space) / 모바일(가상 조이스틱 + 점프 버튼) */
 export default function PlayPage() {
   const [params] = useSearchParams();
+  useGameViewport();
   // 닉네임 없이 들어오면(공유 링크 등) 로비로 보내 캐릭터를 먼저 고르게 함
   if (!params.get("name")) {
     return <Navigate to={`/?${new URLSearchParams({ room: params.get("room") || "lobby" })}`} replace />;

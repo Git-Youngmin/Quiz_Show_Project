@@ -60,6 +60,8 @@ export function QuizEditor({
 
       <textarea
         className="input"
+        name="question"
+        aria-label="질문"
         style={{ width: "100%", minHeight: 64, resize: "vertical", marginTop: 12 }}
         placeholder={draft.quizType === "OX" ? "예) 바나나는 나무에서 자란다?" : "예) 태양계에서 가장 큰 행성은?"}
         value={draft.question}
@@ -71,7 +73,7 @@ export function QuizEditor({
         <div className="row" style={{ marginTop: 12 }}>
           <span>정답</span>
           {(["O", "X"] as const).map((a) => (
-            <button key={a} type="button" className={`answer-toggle ${a} ${draft.answer === a ? "selected" : ""}`} onClick={() => setDraft({ ...draft, answer: a })}>
+            <button key={a} type="button" aria-pressed={draft.answer === a} aria-label={`정답 ${a}`} className={`answer-toggle ${a} ${draft.answer === a ? "selected" : ""}`} onClick={() => setDraft({ ...draft, answer: a })}>
               {a}
             </button>
           ))}
@@ -86,6 +88,9 @@ export function QuizEditor({
               </button>
               <input
                 className="input"
+                name={`choice-${letter}`}
+                aria-label={`보기 ${letter}`}
+                autoComplete="off"
                 placeholder={`보기 ${letter} (${POS[letter]})`}
                 value={draft.choices[i]}
                 maxLength={MAX_CHOICE_LENGTH}
@@ -107,6 +112,8 @@ export function QuizEditor({
           <input
             className="input"
             type="number"
+            name="timeLimitSec"
+            inputMode="numeric"
             min={TIME_LIMIT_SEC.min}
             max={TIME_LIMIT_SEC.max}
             value={draft.timeLimitSec}

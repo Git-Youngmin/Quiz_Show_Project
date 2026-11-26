@@ -78,6 +78,24 @@ export const CHARACTER_COLORS = [
   "#747d8c", // 쿨 그레이
 ] as const;
 
+/** 색상 이름 (스크린 리더·툴팁용) */
+export const CHARACTER_COLOR_NAMES: Record<(typeof CHARACTER_COLORS)[number], string> = {
+  "#ff5c8a": "스트로베리 핑크",
+  "#ff4757": "체리 레드",
+  "#ff7f50": "코랄 오렌지",
+  "#ffa502": "망고 오렌지",
+  "#ffe14d": "레몬 옐로우",
+  "#7ae582": "라임 그린",
+  "#2ed573": "민트 에메랄드",
+  "#00d2d3": "터콰이즈",
+  "#4dd9ff": "스카이 블루",
+  "#2e86de": "마린 블루",
+  "#5352ed": "네온 바이올렛",
+  "#b07cff": "라벤더 퍼플",
+  "#ff9ff3": "베이비 핑크",
+  "#747d8c": "쿨 그레이",
+};
+
 export const isCharacterShape = (v: unknown): v is CharacterShape =>
   typeof v === "string" && (CHARACTER_SHAPES as readonly string[]).includes(v as CharacterShape);
 export const isCharacterAccessory = (v: unknown): v is CharacterAccessory =>

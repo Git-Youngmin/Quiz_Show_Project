@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { ADMIN_PASSWORD_LENGTH, ROOM_ID_PATTERN } from "@quiz/shared";
 import { createRoom } from "../lib/api";
+import { canAutoFocus } from "../lib/autoFocus";
 import type { AdminSession } from "../lib/adminSession";
 
 type Mode = "login" | "create";
@@ -80,25 +81,33 @@ export function AdminLogin({
           <span>방 코드</span>
           <input
             className="input mono"
+            name="username"
             value={roomId}
             maxLength={32}
             placeholder="예) friday-quiz"
             autoCapitalize="off"
+            autoComplete="username"
+            spellCheck={false}
             onChange={(e) => setRoomId(e.target.value.trim())}
+            aria-invalid={roomId !== "" && !roomValid}
+            aria-describedby="admin-room-error"
           />
-          {roomId && !roomValid && <small className="field-error">영문, 숫자, -, _ 만 쓸 수 있어요</small>}
+          <small id="admin-room-error" className="field-error" aria-live="polite">
+            {roomId && !roomValid ? "영문, 숫자, -, _ 만 쓸 수 있어요" : ""}
+          </small>
         </label>
         <label className="field">
           <span>{mode === "create" ? "방장 비밀번호 정하기" : "방장 비밀번호"}</span>
           <input
             className="input"
             type="password"
+            name="password"
             value={password}
             maxLength={ADMIN_PASSWORD_LENGTH.max}
             placeholder={`${ADMIN_PASSWORD_LENGTH.min}자 이상`}
             autoComplete={mode === "create" ? "new-password" : "current-password"}
             onChange={(e) => setPassword(e.target.value)}
-            autoFocus={!!initialRoom}
+            autoFocus={!!initialRoom && canAutoFocus()}
           />
         </label>
 

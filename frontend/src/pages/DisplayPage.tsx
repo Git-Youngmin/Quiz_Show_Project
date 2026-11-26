@@ -12,12 +12,14 @@ import { World } from "../game/World";
 import { PHYSICS_GRAVITY } from "../game/constants";
 import { RemotePlayers } from "../game/RemotePlayers";
 import { CameraDirector } from "../game/CameraDirector";
+import { useGameViewport } from "../lib/useGameViewport";
 
 /**
  * 방송 송출 뷰 — UI 최소화, 3D 월드 + 게임 단계별 다이나믹 카메라.
  * 모든 플레이어를 원격 플레이어로 렌더링한다.
  */
 export default function DisplayPage() {
+  useGameViewport();
   useRoomConnection("display");
   useGameAudio("display");
 
